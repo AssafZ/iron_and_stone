@@ -34,7 +34,7 @@ A player's Company encounters the AI's Company on a road, triggering a battle. T
 
 **Acceptance Scenarios**:
 
-1. **Given** a player Company and an AI Company occupy the same road segment, **When** they meet, **Then** the Battle Detail Screen opens showing both sides in a side-view 2D layout.
+1. **Given** a player Company and an AI Company occupy the same road segment, **When** they meet, **Then** the Battle Detail Screen opens showing both sides in a side-view 2D layout with melee units (Warriors, Knights) at the front advancing toward opponents and ranged units (Archers, Catapults) and Peasants positioned at the rear firing from behind.
 2. **Given** the Battle Detail Screen is open, **When** battle resolves, **Then** damage is calculated per the Unit Balance Sheet (Warrior: 15 DMG, Knight: 40 DMG, Archer: 25 DMG, Catapult: 60 DMG).
 3. **Given** a battle occurs on a road, **When** a Knight is present in a Company, **Then** that Knight deals 2× damage (80 DMG) on the road.
 4. **Given** a player Company attacks a castle wall where Archers are stationed, **When** the player's Company contains no Warriors, **Then** Archers deal 2× damage and have 75% damage reduction from incoming attacks.
@@ -98,7 +98,7 @@ The AI opponent deploys, moves, and battles without any player input, providing 
 
 ### User Story 6 — Victory and Defeat Conditions (Priority: P6)
 
-The game correctly detects and announces win/loss conditions — either by one side capturing all castles or by one side controlling the required number of castles for the target duration.
+The game correctly detects and announces win/loss conditions when one side captures all castles (Total Conquest). Target Capture win condition is out of scope for the MVP.
 
 **Why this priority**: Clear win/loss conditions complete the game session loop, making each match feel finite and meaningful.
 
@@ -108,8 +108,7 @@ The game correctly detects and announces win/loss conditions — either by one s
 
 1. **Given** the player captures the last AI-controlled castle, **When** the capture is confirmed, **Then** a victory screen is displayed and the match ends.
 2. **Given** the AI captures the last player-controlled castle, **When** the capture is confirmed, **Then** a defeat screen is displayed and the match ends.
-3. **Given** the match has a target-capture win condition (e.g., hold 5 castles simultaneously), **When** the player holds that number of castles for the required duration, **Then** a victory screen is displayed.
-4. **Given** a victory or defeat screen is shown, **When** the player dismisses it, **Then** they are returned to the main menu.
+3. **Given** a victory or defeat screen is shown, **When** the player dismisses it, **Then** they are returned to the main menu.
 
 ---
 
@@ -130,12 +129,12 @@ The game correctly detects and announces win/loss conditions — either by one s
 
 - **FR-001**: The game MUST load a medieval map with at least 2 castles (one per player) and a network of road connections between map nodes at the start of each match.
 - **FR-002**: The game MUST support exactly one human player versus one AI opponent in each match session.
-- **FR-003**: A match MUST have a defined win condition: either Total Conquest (control 100% of castles) or Target Capture (hold a preset number of castles simultaneously for a set duration).
+- **FR-003**: A match MUST have a single win condition: Total Conquest — the first side to control 100% of castles wins. Target Capture is out of scope for the MVP.
 
 **Unit Management & Castle Economy**
 
-- **FR-004**: Each castle MUST maintain an internal garrison reservoir with a base cap of 200–500 units.
-- **FR-005**: The garrison MUST grow automatically over time, respecting the per-Company cap of 50 soldiers and the total Castle Cap.
+- **FR-004**: Each castle MUST maintain an internal garrison reservoir with a base cap of 250 units.
+- **FR-005**: The garrison MUST grow automatically at a base rate of 1 unit per role per 10 seconds, respecting the per-Company cap of 50 soldiers and the total Castle Cap.
 - **FR-006**: For every Peasant present in a castle, the castle's growth rate MUST increase by +5% and the Castle Cap MUST increase by +5%, with effects stacking across all Peasants.
 - **FR-007**: The player MUST be able to deploy a Company of up to 50 soldiers from the castle reservoir with a custom unit composition drawn from the 5 available roles (Peasant, Warrior, Knight, Archer, Catapult).
 - **FR-008**: The game MUST prevent deployment of a Company that exceeds 50 soldiers total.
@@ -156,12 +155,15 @@ The game correctly detects and announces win/loss conditions — either by one s
 - **FR-014**: When two opposing Companies meet on the same road segment, the Battle Detail Screen MUST open automatically.
 - **FR-015**: When a Company reaches an enemy castle, the Battle Detail Screen MUST open.
 - **FR-016**: Battle damage MUST be calculated per unit role: Warrior 15 DMG / 50 HP, Knight 40 DMG / 100 HP, Archer 25 DMG / 30 HP, Catapult 60 DMG / 150 HP, Peasant 0 DMG / 10 HP.
+- **FR-016a**: Battle MUST resolve in simultaneous rounds. Each round: melee units (Warriors, Knights) advance toward the nearest enemy unit at their movement speed; ranged units (Archers, Catapults) and Peasants hold their position and attack from range. All damage from all units is applied simultaneously at the end of each round; units whose HP reaches 0 are removed before the next round begins.
+- **FR-016b**: Melee units (Warriors, Knights) MUST target the closest advancing enemy melee unit first; if no melee units remain, they target the nearest enemy unit. Ranged units MUST target any enemy unit within their firing range, prioritising the closest.
 - **FR-017**: Knights MUST deal 2× damage when battling on a road.
 - **FR-018**: Archers stationed on castle walls MUST deal 2× damage and receive 75% damage reduction unless an attacking Company contains Warriors.
 - **FR-019**: If attacking Warriors are present, the Archer High Ground bonus MUST be fully negated.
 - **FR-020**: Catapults MUST destroy Archer wall protection (Wall Breaker ability), removing the Archer bonus for subsequent attack rounds.
 - **FR-021**: Friendly Companies that arrive at an active battle location during the battle MUST join as reinforcement waves.
 - **FR-022**: After a battle concludes, a victory/defeat summary screen MUST be shown before returning to the map view.
+- **FR-022a**: When all defending units in a castle are eliminated, ownership of that castle MUST transfer instantly to the attacking side; no occupation timer is required.
 
 **AI Opponent**
 
@@ -172,18 +174,18 @@ The game correctly detects and announces win/loss conditions — either by one s
 
 **Victory / Defeat**
 
-- **FR-027**: The game MUST detect and announce a player victory when all castles are under player control (Total Conquest) or when the target-capture condition is met.
+- **FR-027**: The game MUST detect and announce a player victory when all castles are under player control (Total Conquest).
 - **FR-028**: The game MUST detect and announce a player defeat when all player castles are captured by the AI.
 - **FR-029**: After a victory or defeat screen is dismissed, the player MUST be returned to the main menu.
 
 ### Key Entities
 
-- **Match**: A single game session; has a win condition type, duration, and two participants (human player and AI). Ends when a win condition is met.
+- **Match**: A single game session; has a Total Conquest win condition, a duration, and two participants (human player and AI). Ends when one side controls all castles.
 - **Map**: The game board; composed of map nodes (castles, road intersections) and road edges connecting them. Fixed per match.
-- **Castle**: A map node owned by one player or neutral; has a garrison reservoir, current unit counts by role, a Castle Cap, and a growth rate. Can be captured.
+- **Castle**: A map node owned by one player or neutral; has a garrison reservoir (base cap: 250 units), current unit counts by role, a Castle Cap, and a growth rate. Ownership transfers instantly when all defending units are eliminated.
 - **Company**: A mobile unit group on the map; contains up to 50 soldiers with a composition of one or more unit roles; has a current location, a destination, and a derived movement speed.
 - **Unit Role**: One of five archetypes (Peasant, Warrior, Knight, Archer, Catapult); each has fixed HP, damage, speed, and a special ability.
-- **Battle**: An engagement triggered when opposing Companies meet; has participants (one or more Companies per side), resolves in real-time, and produces survivors and an outcome.
+- **Battle**: An engagement triggered when opposing Companies meet; has participants (one or more Companies per side), resolves in simultaneous rounds (melee units advance, ranged units hold and fire, damage applied simultaneously per round), and produces survivors and an outcome.
 
 ## Success Criteria *(mandatory)*
 
@@ -192,10 +194,20 @@ The game correctly detects and announces win/loss conditions — either by one s
 - **SC-001**: A player can start a new single-player match and have the first Company deployed and moving on the map within 60 seconds of launch.
 - **SC-002**: Battle outcomes correctly reflect unit role stat differences in 100% of simulated test cases (e.g., a full Company of Knights defeats a full Company of Warriors of equal size when on a road).
 - **SC-003**: The AI opponent makes at least one offensive move (deploy + march toward a player objective) within 30 seconds of match start in 100% of test runs.
-- **SC-004**: Castle growth, the 50-soldier Company cap, and the Castle Cap all behave correctly in 100% of boundary-condition test cases (e.g., growth stops exactly at cap, Peasant bonus stacks correctly).
+- **SC-004**: Castle growth, the 50-soldier Company cap, and the Castle Cap (base: 250 units) all behave correctly in 100% of boundary-condition test cases (e.g., growth stops exactly at cap, Peasant bonus stacks correctly).
 - **SC-005**: Merging two Companies that exceed 50 soldiers always produces a primary Company of exactly 50 and an overflow Company with the correct remainder.
 - **SC-006**: A complete match — from launch to victory or defeat — can be played end-to-end without a crash or unrecoverable error state.
 - **SC-007**: 80% of first-time players in playtesting are able to complete their first match (win or lose) without external guidance.
+
+## Clarifications
+
+### Session 2026-03-02
+
+- Q: What is the base castle growth rate (tick interval and units added per tick)? → A: 1 unit per role per 10 seconds
+- Q: How is a castle captured — instant on elimination, occupation timer, or garrison threshold? → A: Instant on elimination (ownership transfers the moment all defending units are destroyed)
+- Q: What is the battle round structure — how do units deal damage? → A: Dynamic simultaneous rounds; melee units (Warriors, Knights) advance toward enemy units at their movement speed each round; ranged units (Archers, Catapults) and Peasants hold position and fire from behind; all damage is applied simultaneously at the end of each round, then casualties are removed before the next round begins
+- Q: Which win condition does the MVP support — Total Conquest only, both selectable, or both fixed per map? → A: Total Conquest only (control 100% of castles); Target Capture deferred to post-MVP
+- Q: What is the concrete base Castle Cap value (FR-004 specified a range of 200–500)? → A: 250 units
 
 ## Assumptions
 
@@ -204,5 +216,5 @@ The game correctly detects and announces win/loss conditions — either by one s
 - The MVP does not include ads, monetization, or multiplayer; these are post-MVP features per the PRD.
 - Session data (match results) does not persist between sessions in the MVP; no account system or leaderboard is required.
 - The game is targeted at mobile (touch interface) but the MVP may be developed and tested on a single platform first (e.g., iOS or Android) before cross-platform support is added.
-- "Growth" for castle units is continuous (tick-based at a fixed interval), not turn-based.
+- "Growth" for castle units is continuous (tick-based at a fixed interval of 10 seconds), not turn-based. The base rate is 1 unit per role per tick.
 - The Battle Detail Screen resolves in real-time but the player is a spectator only — no direct control during battle in the MVP.
