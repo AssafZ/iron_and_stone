@@ -1,6 +1,13 @@
-# Implementation Plan: Iron & Stone MVP — Single-Player Mode
-
-**Branch**: `001-mvp-single-player` | **Date**: 2026-03-02 | **Spec**: [spec.md](./spec.md)  
+# Implementation Plan: Iron & Stone MVP — Single-Player Mode│   └── entities/
+│   │   ├── unit_role.dart           # Enum: Peasant|Warrior|Knight|Archer|Catapult + stats (HP, DMG, speed, range, special)
+│   │   ├── company.dart             # ≤50 soldiers, role composition map, derived movement speed; garrison is flat pool Map<UnitRole,int>
+│   │   ├── castle.dart              # Garrison reservoir (flat Map<UnitRole,int>), ownership, cap, growth rate, Peasant bonus
+│   │   ├── map_node.dart            # Node type (castle | road_junction), position
+│   │   ├── road_edge.dart           # Directed edge connecting two MapNodes
+│   │   ├── game_map.dart            # Graph: nodes + edges, path resolution
+│   │   ├── game_map_fixture.dart    # Hardcoded fixed match map: 4–8 castle nodes + road edges + starting positions; used by MatchNotifier.newGame()
+│   │   ├── battle.dart              # Participants, round state, round log, outcome (includes draw outcome)
+│   │   └── match.dart               # Session: map, players, win condition, elapsed timeh**: `001-mvp-single-player` | **Date**: 2026-03-02 | **Spec**: [spec.md](./spec.md)  
 **Input**: Feature specification from `/specs/001-mvp-single-player/spec.md`
 
 ## Summary
@@ -76,21 +83,24 @@ lib/
 │   │   ├── terrain_bonus.dart       # Knight road 2× bonus; Archer High Ground 2×/75% DR; Catapult Wall Breaker
 │   │   ├── growth_engine.dart       # Castle tick (1 unit/role/10 s), Peasant +5% multiplier, cap enforcement
 │   │   ├── merge_split_rules.dart   # Overflow Company logic; role-based split validation
-│   │   └── victory_checker.dart     # Total Conquest: all castles same ownership → match end
+│   │   ├── victory_checker.dart     # Total Conquest: all castles same ownership → match end
+│   │   └── ai_controller.dart       # Pure Dart — deterministic AI: deploy → march → engage decision tree (NO Flutter/state imports)
 │   └── use_cases/
 │       ├── deploy_company.dart      # Validate + remove from garrison; place Company on map
-│       ├── move_company.dart        # Assign destination; validate road path; update position per tick
-│       ├── resolve_battle.dart      # Orchestrate battle_engine rounds; return outcome + survivors
+│       ├── move_company.dart        # Assign destination; validate road path; update position per tick; detect reinforcement-wave routing to active battle
+│       ├── resolve_battle.dart      # Orchestrate battle_engine rounds; return outcome + survivors; handle draw; transfer castle ownership
 │       ├── merge_companies.dart     # Combine two Companies; spawn overflow if >50
 │       ├── split_company.dart       # Role-slider split; validate counts sum to original
-│       └── tick_castle_growth.dart  # Apply one growth tick to a castle; respect cap
+│       ├── tick_castle_growth.dart  # Apply one growth tick to a castle; respect cap
+│       ├── tick_match.dart          # Per-tick orchestrator: growth → collision detection → AI decisions → victory check (called by MatchNotifier; contains NO Flutter logic)
+│       └── check_collisions.dart    # Detect opposing Companies on same road segment or Company arriving at enemy castle; return list of BattleTrigger events
 │
-├── state/                           # Riverpod providers — no direct UI rendering logic
-│   ├── match_notifier.dart          # MatchState, game-loop timer (10 s tick), phase transitions
+├── state/                           # Riverpod providers — no direct UI rendering logic; MUST NOT contain game-rule logic
+│   ├── match_notifier.dart          # MatchState, game-loop timer (10 s tick); delegates ALL rule evaluation to TickMatch use case
 │   ├── castle_notifier.dart         # Per-castle garrison + ownership state
-│   ├── company_notifier.dart        # Company positions, movement targets, in-transit state
+│   ├── company_notifier.dart        # Company positions, movement targets, in-transit state; selectedCompanyId for two-step tap-to-select/tap-to-move UX
 │   ├── battle_notifier.dart         # Active battle state, round log, spectator stream
-│   └── ai_controller.dart           # Deterministic AI: deploy → march → engage decision tree
+│   └── ai_controller_notifier.dart  # Thin Riverpod wrapper; calls AiController (lib/domain/rules/ai_controller.dart) — NO decision logic here
 │
 ├── ui/                              # Flutter widgets only — NO business logic or model mutation
 │   ├── screens/
@@ -129,7 +139,8 @@ test/
 │   │   ├── movement_rules_test.dart # Speed derivation, road-only constraint
 │   │   ├── growth_engine_test.dart  # Tick rate, Peasant bonus, cap enforcement
 │   │   ├── merge_split_test.dart    # Overflow Company, role-split sum invariant
-│   │   └── victory_checker_test.dart
+│   │   ├── victory_checker_test.dart
+│   │   └── ai_controller_test.dart  # Pure Dart AI decision logic: deploy threshold, target selection, no-action on empty garrison
 │   └── use_cases/                   # Unit tests for each use-case class
 ├── widget/
 │   ├── map_screen_test.dart
@@ -147,4 +158,12 @@ test/
 
 ## Complexity Tracking
 
-> No Constitution violations identified — section intentionally blank.
+> Constitution violations identified by `/speckit.analyze` (2026-03-02) and resolved in this plan revision:
+>
+> **C1 — Principle II violation (resolved)**: `AiController` was initially placed in `lib/state/`. Corrected: AI decision logic moved to `lib/domain/rules/ai_controller.dart` (pure Dart, zero Flutter imports). A thin `lib/state/ai_controller_notifier.dart` wraps it for Riverpod integration only.
+>
+> **C2 — Principle II violation (resolved)**: `MatchNotifier` was initially written to contain battle-trigger detection, victory checking, growth orchestration, and AI wiring. Corrected: a `lib/domain/use_cases/tick_match.dart` orchestrator now owns all per-tick rule evaluation (growth → collision detection → AI decisions → victory check). `MatchNotifier` calls `TickMatch` and applies the returned state delta — no game-rule logic remains in the state layer.
+>
+> **A4 — Missing map fixture (resolved)**: Added `lib/domain/entities/game_map_fixture.dart` as the hardcoded fixed map data source for `MatchNotifier.newGame()`.
+>
+> **A1 — Firing range undefined (resolved)**: `UnitRole` now includes a `range` field. Archer range = 3, Catapult range = 5 (in battle-field distance units). All other roles have range = 1 (melee only). Defined in `lib/domain/entities/unit_role.dart`.
