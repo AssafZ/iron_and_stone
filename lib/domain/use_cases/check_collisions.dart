@@ -61,12 +61,16 @@ final class CompanyOnMap {
     this.progress = 0.0,
   });
 
+  /// Sentinel used to distinguish "caller passed null explicitly" from
+  /// "caller did not pass the argument at all" for the nullable [destination].
+  static const Object _destinationSentinel = Object();
+
   CompanyOnMap copyWith({
     Company? company,
     String? id,
     Ownership? ownership,
     MapNode? currentNode,
-    MapNode? destination,
+    Object? destination = _destinationSentinel,
     double? progress,
   }) {
     return CompanyOnMap(
@@ -74,7 +78,9 @@ final class CompanyOnMap {
       id: id ?? this.id,
       ownership: ownership ?? this.ownership,
       currentNode: currentNode ?? this.currentNode,
-      destination: destination,
+      destination: identical(destination, _destinationSentinel)
+          ? this.destination
+          : destination as MapNode?,
       progress: progress ?? this.progress,
     );
   }
