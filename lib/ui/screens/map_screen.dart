@@ -42,17 +42,38 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _showHint = false;
   Timer? _hintTimer;
   Timer? _gameLoopTimer;
+  Timer? _visualTimer;
   final TransformationController _transformController = TransformationController();
 
+  // Elapsed seconds since the last game-logic tick — used to interpolate
+  // company positions smoothly between ticks in the UI layer.
+  double _elapsedSinceLastTick = 0.0;
+
   static const Duration _tickInterval = Duration(seconds: 10);
+  static const Duration _visualInterval = Duration(milliseconds: 50);
+  static const double _tickSeconds = 10.0;
 
   @override
   void initState() {
     super.initState();
     _checkFirstRunHint();
     _startGameLoop();
+    _startVisualTimer();
     // Fit the entire map canvas into the viewport on first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => _fitMapToScreen());
+  }
+
+  /// Fires at ~20 fps to advance the visual interpolation counter and rebuild
+  /// the map so company markers slide smoothly between nodes.
+  void _startVisualTimer() {
+    _visualTimer = Timer.periodic(_visualInterval, (_) {
+      if (!mounted) return;
+      setState(() {
+        _elapsedSinceLastTick =
+            (_elapsedSinceLastTick + _visualInterval.inMilliseconds / 1000.0)
+                .clamp(0.0, _tickSeconds);
+      });
+    });
   }
 
   /// Compute and apply an initial transformation that shows the whole map.
@@ -79,6 +100,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void _startGameLoop() {
     _gameLoopTimer = Timer.periodic(_tickInterval, (_) {
       if (mounted) {
+        // Reset interpolation counter so visual position snaps back to the
+        // authoritative node position after each logic tick.
+        setState(() => _elapsedSinceLastTick = 0.0);
         ref.read(matchNotifierProvider.notifier).tick();
       }
     });
@@ -88,6 +112,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void dispose() {
     _hintTimer?.cancel();
     _gameLoopTimer?.cancel();
+    _visualTimer?.cancel();
     _transformController.dispose();
     super.dispose();
   }
@@ -250,11 +275,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                     );
                   }),
-                  // Company markers — only show player companies and companies at
-                  // nodes the player can see (all castles + road nodes are always visible).
-                  // AI companies are visible (fog-of-war is out of scope for MVP).
+                  // Company markers — positions are interpolated between
+                  // currentNode and the next node using stored progress plus
+                  // elapsed time since the last logic tick, so markers slide
+                  // smoothly across the map in real time.
                   ...companies.map((co) {
-                    final (cx, cy) = _nodeCanvasPos(co.currentNode);
+                    final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
 
                     return Positioned(
@@ -538,6 +564,42 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return (
       node.x * MapScreen._scale + MapScreen._offsetX,
       node.y * MapScreen._scale + MapScreen._offsetY,
+    );
+  }
+
+  /// Interpolated canvas position for a moving company.
+  ///
+  /// Uses the authoritative [CompanyOnMap.progress] stored after the last tick
+  /// plus the elapsed wall-clock time since that tick to extrapolate where the
+  /// marker should be rendered right now — giving smooth continuous movement.
+  (double, double) _companyVisualPos(CompanyOnMap co, MatchState matchState) {
+    final destination = co.destination;
+    if (destination == null || destination.id == co.currentNode.id) {
+      return _nodeCanvasPos(co.currentNode);
+    }
+
+    // Find the next node along the path.
+    final path = matchState.match.map.pathBetween(co.currentNode, destination);
+    if (path.length < 2) return _nodeCanvasPos(co.currentNode);
+    final nextNode = path[1];
+
+    // Find the edge to get its length.
+    final edge = matchState.match.map.edges
+        .where((e) => e.from.id == co.currentNode.id && e.to.id == nextNode.id)
+        .firstOrNull;
+    if (edge == null) return _nodeCanvasPos(co.currentNode);
+
+    // Compute interpolated progress: stored tick progress + real-time advance.
+    final speedPerSec = co.company.movementSpeed.toDouble();
+    final extraProgress = (speedPerSec * _elapsedSinceLastTick) / edge.length;
+    final visualProgress = (co.progress + extraProgress).clamp(0.0, 1.0);
+
+    // Lerp canvas positions.
+    final (x0, y0) = _nodeCanvasPos(co.currentNode);
+    final (x1, y1) = _nodeCanvasPos(nextNode);
+    return (
+      x0 + (x1 - x0) * visualProgress,
+      y0 + (y1 - y0) * visualProgress,
     );
   }
 
