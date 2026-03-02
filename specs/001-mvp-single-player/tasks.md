@@ -41,41 +41,41 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 ### Tests for Foundational Entities *(Red-Green-Refactor — write first, confirm FAILING)*
 
-- [ ] T008 [P] Write failing unit tests for `SoldierCount` in `test/domain/entities/soldier_count_test.dart`: valid range [0, 50], construction at 0 and 50, rejection of −1 and 51
-- [ ] T009 [P] Write failing unit tests for `Ownership` in `test/domain/entities/ownership_test.dart`: values player/ai/neutral, equality, serialization round-trip
-- [ ] T010 [P] Write failing unit tests for `UnitRole` in `test/domain/entities/unit_role_test.dart`: all five roles exist; stats match spec (HP, DMG, speed per FR-016, FR-009); `range` field present (Peasant/Warrior/Knight/Archer melee=1; Archer=3, Catapult=5); special-ability tag present for Knight, Archer, Catapult, Peasant
+- [x] T008 [P] Write failing unit tests for `SoldierCount` in `test/domain/entities/soldier_count_test.dart`: valid range [0, 50], construction at 0 and 50, rejection of −1 and 51
+- [x] T009 [P] Write failing unit tests for `Ownership` in `test/domain/entities/ownership_test.dart`: values player/ai/neutral, equality, serialization round-trip
+- [x] T010 [P] Write failing unit tests for `UnitRole` in `test/domain/entities/unit_role_test.dart`: all five roles exist; stats match spec (HP, DMG, speed per FR-016, FR-009); `range` field present (Peasant/Warrior/Knight/Archer melee=1; Archer=3, Catapult=5); special-ability tag present for Knight, Archer, Catapult, Peasant
 
 ### Implementation of Foundational Entities
 
-- [ ] T011 [P] Implement `lib/domain/value_objects/soldier_count.dart` — validated `int` ∈ [0, 50]; throws `ArgumentError` outside range; make T008 pass
-- [ ] T012 [P] Implement `lib/domain/value_objects/ownership.dart` — sealed enum `player | ai | neutral`; make T009 pass
-- [ ] T013 Implement `lib/domain/entities/unit_role.dart` — enum `Peasant | Warrior | Knight | Archer | Catapult` with const fields `hp`, `damage`, `speed`, `range`, `specialAbility`; values: Peasant (10 HP, 0 DMG, speed 5, range 1), Warrior (50 HP, 15 DMG, speed 6, range 1), Knight (100 HP, 40 DMG, speed 10, range 1), Archer (30 HP, 25 DMG, speed 6, range 3), Catapult (150 HP, 60 DMG, speed 3, range 5); make T010 pass
+- [x] T011 [P] Implement `lib/domain/value_objects/soldier_count.dart` — validated `int` ∈ [0, 50]; throws `ArgumentError` outside range; make T008 pass
+- [x] T012 [P] Implement `lib/domain/value_objects/ownership.dart` — sealed enum `player | ai | neutral`; make T009 pass
+- [x] T013 Implement `lib/domain/entities/unit_role.dart` — enum `Peasant | Warrior | Knight | Archer | Catapult` with const fields `hp`, `damage`, `speed`, `range`, `specialAbility`; values: Peasant (10 HP, 0 DMG, speed 5, range 1), Warrior (50 HP, 15 DMG, speed 6, range 1), Knight (100 HP, 40 DMG, speed 10, range 1), Archer (30 HP, 25 DMG, speed 6, range 3), Catapult (150 HP, 60 DMG, speed 3, range 5); make T010 pass
 
 ### Tests for Foundational Compound Entities *(write first, confirm FAILING)*
 
-- [ ] T014 [P] Write failing unit tests for `Company` in `test/domain/entities/company_test.dart`: composition map integrity, `totalSoldiers` ≤ 50 enforced, `movementSpeed` equals minimum role speed, adding soldiers beyond cap rejected
-- [ ] T015 [P] Write failing unit tests for `Castle` in `test/domain/entities/castle_test.dart`: garrison reservoir initialises correctly as a flat `Map<UnitRole, int>` pool (total counts by role, not a list of Company slots); ownership field; base cap 250; Peasant bonus calculation (+5% per Peasant for both growth rate and cap)
-- [ ] T016 [P] Write failing unit tests for `MapNode` in `test/domain/entities/map_node_test.dart`: castle vs road-junction node types, position fields
-- [ ] T017 [P] Write failing unit tests for `RoadEdge` in `test/domain/entities/road_edge_test.dart`: directed/undirected, connects exactly two nodes, no self-loops
-- [ ] T018 [P] Write failing unit tests for `GameMap` in `test/domain/entities/game_map_test.dart`: node and edge collection, `pathBetween` returns a valid road-only sequence, returns empty/null for disconnected nodes
-- [ ] T019 [P] Write failing unit tests for `Battle` in `test/domain/entities/battle_test.dart`: participants non-empty per side, initial round state is zero, outcome field starts null
-- [ ] T020 [P] Write failing unit tests for `Match` in `test/domain/entities/match_test.dart`: contains valid GameMap, two distinct players, elapsed time starts at zero, win condition is `totalConquest`
+- [x] T014 [P] Write failing unit tests for `Company` in `test/domain/entities/company_test.dart`: composition map integrity, `totalSoldiers` ≤ 50 enforced, `movementSpeed` equals minimum role speed, adding soldiers beyond cap rejected
+- [x] T015 [P] Write failing unit tests for `Castle` in `test/domain/entities/castle_test.dart`: garrison reservoir initialises correctly as a flat `Map<UnitRole, int>` pool (total counts by role, not a list of Company slots); ownership field; base cap 250; Peasant bonus calculation (+5% per Peasant for both growth rate and cap)
+- [x] T016 [P] Write failing unit tests for `MapNode` in `test/domain/entities/map_node_test.dart`: castle vs road-junction node types, position fields
+- [x] T017 [P] Write failing unit tests for `RoadEdge` in `test/domain/entities/road_edge_test.dart`: directed/undirected, connects exactly two nodes, no self-loops
+- [x] T018 [P] Write failing unit tests for `GameMap` in `test/domain/entities/game_map_test.dart`: node and edge collection, `pathBetween` returns a valid road-only sequence, returns empty/null for disconnected nodes
+- [x] T019 [P] Write failing unit tests for `Battle` in `test/domain/entities/battle_test.dart`: participants non-empty per side, initial round state is zero, outcome field starts null
+- [x] T020 [P] Write failing unit tests for `Match` in `test/domain/entities/match_test.dart`: contains valid GameMap, two distinct players, elapsed time starts at zero, win condition is `totalConquest`
 
 ### Implementation of Foundational Compound Entities
 
-- [ ] T021 Implement `lib/domain/entities/company.dart` — `Map<UnitRole, int>` composition; `SoldierCount totalSoldiers`; derived `int movementSpeed` (min of present role speeds); immutable; `copyWith`; make T014 pass
-- [ ] T022 Implement `lib/domain/entities/castle.dart` — `garrison` is a flat `Map<UnitRole, int>` (total units available by role, not Company slots); `Ownership ownership`; `int cap` (base 250); `double growthRateMultiplier` (1.0 + 0.05 × peasantCount); `copyWith`; make T015 pass
-- [ ] T023 [P] Implement `lib/domain/entities/map_node.dart` — sealed class variants `CastleNode` / `RoadJunctionNode`; `(double x, double y) position`; `String id`; make T016 pass
-- [ ] T024 [P] Implement `lib/domain/entities/road_edge.dart` — `MapNode from`, `MapNode to`, `double length`; equality by node pair; make T017 pass
-- [ ] T025 Implement `lib/domain/entities/game_map.dart` — `List<MapNode> nodes`, `List<RoadEdge> edges`, `List<MapNode> pathBetween(MapNode a, MapNode b)` (BFS/Dijkstra, road-only); make T018 pass
-- [ ] T026 [P] Implement `lib/domain/entities/battle.dart` — `List<Company> attackers`, `List<Company> defenders`, `int roundNumber`, `List<String> roundLog`, `BattleOutcome? outcome`; make T019 pass
-- [ ] T027 Implement `lib/domain/entities/match.dart` — `GameMap map`, `Ownership humanPlayer`, elapsed `Duration time`, `MatchPhase phase`; make T020 pass
-- [ ] T027a [P] Write failing unit tests for `GameMapFixture` in `test/domain/entities/game_map_fixture_test.dart`: fixture produces a valid `GameMap` with 4–8 nodes; at least 2 are `CastleNode`; all nodes reachable via road edges; player castle and AI castle have distinct `Ownership` values
-- [ ] T027b Implement `lib/domain/entities/game_map_fixture.dart` — hardcoded fixed match map: 6 nodes (2 castles + 4 road junctions), road edges with lengths, player start node and AI start node designated; `GameMap build()` factory; make T027a pass
-- [ ] T027c [P] Write failing unit tests for `CheckCollisions` use case in `test/domain/use_cases/check_collisions_test.dart`: opposing Companies on same road segment returns FR-014 trigger; Company arriving at enemy castle node returns FR-015 trigger; friendly Companies on same node returns no trigger; empty map returns no triggers
-- [ ] T027d [P] Write failing unit tests for `TickMatch` use case in `test/domain/use_cases/tick_match_test.dart`: single tick applies growth to all castles; positions all Companies forward; calls `CheckCollisions`; calls `AiController`; calls `VictoryChecker`; returns a `TickResult` with updated castles, companies, battle triggers, and optional `MatchOutcome`
-- [ ] T027e Implement `lib/domain/use_cases/check_collisions.dart` — accepts current `GameMap`, list of all Companies; returns `List<BattleTrigger>` for FR-014 (road) and FR-015 (castle arrival) conditions; pure Dart, zero state/Flutter imports; make T027c pass
-- [ ] T027f Implement `lib/domain/use_cases/tick_match.dart` — orchestrates: `TickCastleGrowth` for all castles → `MoveCompany` position advance for all Companies → `CheckCollisions` → `AiController.decide(MatchState)` → `VictoryChecker.check`; returns immutable `TickResult`; pure Dart; make T027d pass
+- [x] T021 Implement `lib/domain/entities/company.dart` — `Map<UnitRole, int>` composition; `SoldierCount totalSoldiers`; derived `int movementSpeed` (min of present role speeds); immutable; `copyWith`; make T014 pass
+- [x] T022 Implement `lib/domain/entities/castle.dart` — `garrison` is a flat `Map<UnitRole, int>` (total units available by role, not Company slots); `Ownership ownership`; `int cap` (base 250); `double growthRateMultiplier` (1.0 + 0.05 × peasantCount); `copyWith`; make T015 pass
+- [x] T023 [P] Implement `lib/domain/entities/map_node.dart` — sealed class variants `CastleNode` / `RoadJunctionNode`; `(double x, double y) position`; `String id`; make T016 pass
+- [x] T024 [P] Implement `lib/domain/entities/road_edge.dart` — `MapNode from`, `MapNode to`, `double length`; equality by node pair; make T017 pass
+- [x] T025 Implement `lib/domain/entities/game_map.dart` — `List<MapNode> nodes`, `List<RoadEdge> edges`, `List<MapNode> pathBetween(MapNode a, MapNode b)` (BFS/Dijkstra, road-only); make T018 pass
+- [x] T026 [P] Implement `lib/domain/entities/battle.dart` — `List<Company> attackers`, `List<Company> defenders`, `int roundNumber`, `List<String> roundLog`, `BattleOutcome? outcome`; make T019 pass
+- [x] T027 Implement `lib/domain/entities/match.dart` — `GameMap map`, `Ownership humanPlayer`, elapsed `Duration time`, `MatchPhase phase`; make T020 pass
+- [x] T027a [P] Write failing unit tests for `GameMapFixture` in `test/domain/entities/game_map_fixture_test.dart`: fixture produces a valid `GameMap` with 4–8 nodes; at least 2 are `CastleNode`; all nodes reachable via road edges; player castle and AI castle have distinct `Ownership` values
+- [x] T027b Implement `lib/domain/entities/game_map_fixture.dart` — hardcoded fixed match map: 6 nodes (2 castles + 4 road junctions), road edges with lengths, player start node and AI start node designated; `GameMap build()` factory; make T027a pass
+- [x] T027c [P] Write failing unit tests for `CheckCollisions` use case in `test/domain/use_cases/check_collisions_test.dart`: opposing Companies on same road segment returns FR-014 trigger; Company arriving at enemy castle node returns FR-015 trigger; friendly Companies on same node returns no trigger; empty map returns no triggers
+- [x] T027d [P] Write failing unit tests for `TickMatch` use case in `test/domain/use_cases/tick_match_test.dart`: single tick applies growth to all castles; positions all Companies forward; calls `CheckCollisions`; calls `AiController`; calls `VictoryChecker`; returns a `TickResult` with updated castles, companies, battle triggers, and optional `MatchOutcome`
+- [x] T027e Implement `lib/domain/use_cases/check_collisions.dart` — accepts current `GameMap`, list of all Companies; returns `List<BattleTrigger>` for FR-014 (road) and FR-015 (castle arrival) conditions; pure Dart, zero state/Flutter imports; make T027c pass
+- [x] T027f Implement `lib/domain/use_cases/tick_match.dart` — orchestrates: `TickCastleGrowth` for all castles → `MoveCompany` position advance for all Companies → `CheckCollisions` → `AiController.decide(MatchState)` → `VictoryChecker.check`; returns immutable `TickResult`; pure Dart; make T027d pass
 
 **Checkpoint**: All T008–T027f tests pass; `flutter analyze` clean; domain entities fully exercised at unit-test level.
 

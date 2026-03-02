@@ -1,0 +1,224 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/castle.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
+import 'package:iron_and_stone/domain/entities/game_map.dart';
+import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
+import 'package:iron_and_stone/domain/entities/map_node.dart';
+import 'package:iron_and_stone/domain/entities/match.dart';
+import 'package:iron_and_stone/domain/entities/road_edge.dart';
+import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/use_cases/tick_match.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+GameMap _makeMinimalMap() {
+  const playerCastle = CastleNode(
+    id: 'pc',
+    x: 0.0,
+    y: 0.0,
+    ownership: Ownership.player,
+  );
+  const aiCastle = CastleNode(
+    id: 'ac',
+    x: 200.0,
+    y: 0.0,
+    ownership: Ownership.ai,
+  );
+  return GameMap(
+    nodes: [playerCastle, aiCastle],
+    edges: [
+      RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+      RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+    ],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+void main() {
+  group('TickMatch', () {
+    group('castle growth', () {
+      test('single tick increases garrison count for a castle below cap', () {
+        final map = _makeMinimalMap();
+        final castleNode = map.nodes.whereType<CastleNode>().first;
+        final castle = Castle(
+          id: castleNode.id,
+          ownership: castleNode.ownership,
+          garrison: {UnitRole.warrior: 0},
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: [castle],
+          companies: [],
+        );
+
+        final updatedCastle = result.castles.firstWhere((c) => c.id == castle.id);
+        // Growth engine should have added at least 1 warrior
+        expect(
+          updatedCastle.garrison[UnitRole.warrior] ?? 0,
+          greaterThan(0),
+        );
+      });
+    });
+
+    group('company position advance', () {
+      test('single tick moves a company forward along its path', () {
+        final map = GameMapFixture.build();
+        final playerCastleNode =
+            map.nodes.whereType<CastleNode>().firstWhere(
+              (n) => n.ownership == Ownership.player,
+            );
+        final junction = map.nodes.whereType<RoadJunctionNode>().first;
+        final company = CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: 'co_1',
+          ownership: Ownership.player,
+          currentNode: playerCastleNode,
+          destination: junction,
+          progress: 0.0,
+        );
+
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: [],
+          companies: [company],
+        );
+
+        final updated = result.companies.first;
+        // Progress should have advanced (> 0 or moved to next node)
+        expect(
+          updated.progress > 0.0 || updated.currentNode.id != playerCastleNode.id,
+          isTrue,
+        );
+      });
+    });
+
+    group('CheckCollisions called', () {
+      test('TickResult contains battleTriggers field (may be empty)', () {
+        final map = _makeMinimalMap();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: [],
+          companies: [],
+        );
+
+        expect(result.battleTriggers, isA<List<BattleTrigger>>());
+      });
+    });
+
+    group('TickResult shape', () {
+      test('TickResult contains updated castles', () {
+        final map = _makeMinimalMap();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: [],
+          companies: [],
+        );
+
+        expect(result.castles, isA<List<Castle>>());
+      });
+
+      test('TickResult contains updated companies list', () {
+        final map = _makeMinimalMap();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: [],
+          companies: [],
+        );
+
+        expect(result.companies, isA<List<CompanyOnMap>>());
+      });
+
+      test('TickResult matchOutcome is null when no castles are player-only', () {
+        final map = _makeMinimalMap();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+        final castles = map.nodes.whereType<CastleNode>().map((n) {
+          return Castle(
+            id: n.id,
+            ownership: n.ownership, // mixed: player + ai
+            garrison: {},
+          );
+        }).toList();
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: castles,
+          companies: [],
+        );
+
+        expect(result.matchOutcome, isNull);
+      });
+
+      test('TickResult matchOutcome is playerWins when all castles are player-owned', () {
+        final map = _makeMinimalMap();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+        final castles = map.nodes.whereType<CastleNode>().map((n) {
+          return Castle(
+            id: n.id,
+            ownership: Ownership.player, // all player
+            garrison: {},
+          );
+        }).toList();
+
+        final useCase = const TickMatch();
+        final result = useCase.tick(
+          match: match,
+          castles: castles,
+          companies: [],
+        );
+
+        expect(result.matchOutcome, equals(MatchOutcome.playerWins));
+      });
+    });
+  });
+}
