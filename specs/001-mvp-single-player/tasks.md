@@ -236,12 +236,12 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 ### Tests for US6 *(Red-Green-Refactor — write first, confirm FAILING)*
 
-- [ ] T087 [P] [US6] Write failing unit tests for `VictoryChecker` in `test/domain/rules/victory_checker_test.dart`: all-player castles → `MatchOutcome.playerWins`; all-AI castles → `MatchOutcome.aiWins`; mixed → `null`; single-castle map edge case
-- [ ] T088 [P] [US6] Write failing integration test in `test/integration/full_match_test.dart`: full match from launch to Total Conquest; verify `MatchPhase` transitions `setup → playing → ended`; verify correct `MatchOutcome` written
+- [x] T087 [P] [US6] Write failing unit tests for `VictoryChecker` in `test/domain/rules/victory_checker_test.dart`: all-player castles → `MatchOutcome.playerWins`; all-AI castles → `MatchOutcome.aiWins`; mixed → `null`; single-castle map edge case
+- [x] T088 [P] [US6] Write failing integration test in `test/integration/full_match_test.dart`: full match from launch to Total Conquest; verify `MatchPhase` transitions `setup → playing → ended`; verify correct `MatchOutcome` written
 
 ### Implementation for US6
 
-- [ ] T089 [US6] Implement `lib/domain/rules/victory_checker.dart` — `MatchOutcome? check(List<Castle> castles)`: returns `playerWins` if all `Ownership.player`, `aiWins` if all `Ownership.ai`, else `null`; make T087 pass. **Note**: also satisfies US5 Acceptance Scenario 4 ("AI captures all player castles → defeat screen") — that scenario is covered by the `aiWins` branch here.
+- [x] T089 [US6] Implement `lib/domain/rules/victory_checker.dart` — `MatchOutcome? check(List<Castle> castles)`: returns `playerWins` if all `Ownership.player`, `aiWins` if all `Ownership.ai`, else `null`; make T087 pass. **Note**: also satisfies US5 Acceptance Scenario 4 ("AI captures all player castles → defeat screen") — that scenario is covered by the `aiWins` branch here.
 - [ ] T090 [US6] Verify `TickMatch` use case (T027f) already calls `VictoryChecker.check` after each tick and includes the result in `TickResult.matchOutcome` — extend `test/domain/use_cases/tick_match_test.dart` to assert that when all castles are player-owned `TickResult.matchOutcome == MatchOutcome.playerWins`; `MatchNotifier` reads `TickResult.matchOutcome` and navigates to `VictoryScreen` or `DefeatScreen` accordingly; contains NO victory-check logic itself
 - [ ] T091 [US6] Verify `VictoryScreen` and `DefeatScreen` dismiss-to-main-menu flow (already implemented in T056/T057) — run T049 widget tests; confirm they pass end-to-end
 

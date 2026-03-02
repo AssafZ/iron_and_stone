@@ -7,6 +7,7 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/tick_match.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
@@ -446,6 +447,107 @@ void main() {
           isTrue,
           reason: 'AI Company must receive a destination on the tick after deploy',
         );
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // T090 — VictoryChecker delegation
+    // -------------------------------------------------------------------------
+
+    group('VictoryChecker delegation (T090)', () {
+      test(
+          'TickResult.matchOutcome == MatchOutcome.playerWins when all castles are player-owned',
+          () {
+        final map = GameMapFixture.build();
+        final allPlayerCastles = map.nodes
+            .whereType<CastleNode>()
+            .map(
+              (n) => Castle(
+                id: n.id,
+                ownership: Ownership.player,
+                garrison: {},
+              ),
+            )
+            .toList();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: allPlayerCastles,
+          companies: [],
+        );
+
+        // TickMatch delegates to VictoryChecker; both must agree.
+        final checkerOutcome = const VictoryChecker().check(allPlayerCastles);
+        expect(result.matchOutcome, equals(MatchOutcome.playerWins));
+        expect(result.matchOutcome, equals(checkerOutcome));
+      });
+
+      test(
+          'TickResult.matchOutcome == MatchOutcome.aiWins when all castles are AI-owned',
+          () {
+        final map = GameMapFixture.build();
+        final allAiCastles = map.nodes
+            .whereType<CastleNode>()
+            .map(
+              (n) => Castle(
+                id: n.id,
+                ownership: Ownership.ai,
+                garrison: {},
+              ),
+            )
+            .toList();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: allAiCastles,
+          companies: [],
+        );
+
+        final checkerOutcome = const VictoryChecker().check(allAiCastles);
+        expect(result.matchOutcome, equals(MatchOutcome.aiWins));
+        expect(result.matchOutcome, equals(checkerOutcome));
+      });
+
+      test(
+          'TickResult.matchOutcome is null when castles have mixed ownership',
+          () {
+        final map = _makeMinimalMap();
+        // Default fixture: player + ai owned castles.
+        final mixedCastles = map.nodes
+            .whereType<CastleNode>()
+            .map(
+              (n) => Castle(
+                id: n.id,
+                ownership: n.ownership,
+                garrison: {},
+              ),
+            )
+            .toList();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: mixedCastles,
+          companies: [],
+        );
+
+        final checkerOutcome = const VictoryChecker().check(mixedCastles);
+        expect(result.matchOutcome, isNull);
+        expect(result.matchOutcome, equals(checkerOutcome));
       });
     });
   });

@@ -2,19 +2,14 @@ import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/rules/ai_controller.dart';
+import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
 import 'package:iron_and_stone/domain/use_cases/tick_castle_growth.dart';
-import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 
-/// The outcome of a completed match.
-enum MatchOutcome {
-  /// Human player controls all castles.
-  playerWins,
-
-  /// AI controls all castles.
-  aiWins,
-}
+// Re-export MatchOutcome so existing importers of tick_match.dart are unaffected.
+export 'package:iron_and_stone/domain/rules/victory_checker.dart'
+    show MatchOutcome;
 
 /// The immutable result of a single game-loop tick.
 final class TickResult {
@@ -205,18 +200,9 @@ final class TickMatch {
   }
 
   // ---------------------------------------------------------------------------
-  // Victory check
+  // Victory check — delegates to VictoryChecker domain rule
   // ---------------------------------------------------------------------------
 
-  MatchOutcome? _checkVictory(List<Castle> castles) {
-    if (castles.isEmpty) return null;
-
-    final allPlayer = castles.every((c) => c.ownership == Ownership.player);
-    if (allPlayer) return MatchOutcome.playerWins;
-
-    final allAi = castles.every((c) => c.ownership == Ownership.ai);
-    if (allAi) return MatchOutcome.aiWins;
-
-    return null;
-  }
+  MatchOutcome? _checkVictory(List<Castle> castles) =>
+      const VictoryChecker().check(castles);
 }
