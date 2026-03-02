@@ -9,10 +9,12 @@ import 'package:iron_and_stone/ui/theme/app_theme.dart';
 /// to prevent unnecessary repaints of sibling widgets.
 ///
 /// Tapping the marker calls [onTap] (selection intent — no game logic here).
+/// Long-pressing calls [onLongPress] (opens the split-slider sheet).
 class CompanyMarker extends StatelessWidget {
   final CompanyOnMap company;
   final bool isSelected;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   /// Canvas-space coordinates of the company's current position.
   final double x;
@@ -25,6 +27,7 @@ class CompanyMarker extends StatelessWidget {
     required this.y,
     this.isSelected = false,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -32,6 +35,7 @@ class CompanyMarker extends StatelessWidget {
     return RepaintBoundary(
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: _buildMarker(),
       ),
     );

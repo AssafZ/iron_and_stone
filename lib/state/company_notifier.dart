@@ -4,7 +4,9 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
+import 'package:iron_and_stone/domain/use_cases/merge_companies.dart';
 import 'package:iron_and_stone/domain/use_cases/move_company.dart';
+import 'package:iron_and_stone/domain/use_cases/split_company.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 
 /// State for the company list + current selection.
@@ -134,6 +136,75 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
   }
+
+  // ---------------------------------------------------------------------------
+  // Merge
+  // ---------------------------------------------------------------------------
+
+  /// Merge two Companies into one (with optional overflow Company).
+  ///
+  /// Delegates to [MergeCompanies] use case.
+  /// Removes both input Companies from the list and adds the result(s).
+  Future<void> mergeCompanies(String idA, String idB) async {
+    final current = state.valueOrNull ?? const CompanyListState();
+    final a = current.companies.firstWhere((c) => c.id == idA);
+    final b = current.companies.firstWhere((c) => c.id == idB);
+
+    final newPrimaryId = 'co${_idCounter++}';
+    final newOverflowId = 'co${_idCounter++}';
+
+    final result = const MergeCompanies().merge(
+      companyA: a,
+      companyB: b,
+      newId: newPrimaryId,
+      overflowId: newOverflowId,
+    );
+
+    final remaining = current.companies
+        .where((c) => c.id != idA && c.id != idB)
+        .toList();
+    remaining.add(result.primary);
+    if (result.overflow != null) remaining.add(result.overflow!);
+
+    state = AsyncData(current.copyWith(companies: remaining, selectedCompanyId: null));
+    ref.read(matchNotifierProvider.notifier).updateCompanies(remaining);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Split
+  // ---------------------------------------------------------------------------
+
+  /// Split a Company into two using a role-based [splitMap].
+  ///
+  /// Delegates to [SplitCompany] use case.
+  /// Replaces the original Company in the list with the kept Company and adds
+  /// the new split-off Company.
+  Future<void> splitCompany(String id, Map<UnitRole, int> splitMap) async {
+    final current = state.valueOrNull ?? const CompanyListState();
+    final idx = current.companies.indexWhere((c) => c.id == id);
+    if (idx < 0) return;
+
+    final original = current.companies[idx];
+    final newSplitId = 'co${_idCounter++}';
+
+    final result = const SplitCompany().split(
+      company: original,
+      splitComposition: splitMap,
+      keptId: id,
+      splitId: newSplitId,
+    );
+
+    final updated = List<CompanyOnMap>.from(current.companies);
+    updated[idx] = result.kept;
+    updated.add(result.splitOff);
+
+    state = AsyncData(current.copyWith(companies: updated, selectedCompanyId: null));
+    ref.read(matchNotifierProvider.notifier).updateCompanies(updated);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tick
+  // ---------------------------------------------------------------------------
 
   /// Advance all Company positions by one tick.
   void advanceTick({required GameMap map, required double tickSeconds}) {

@@ -187,19 +187,19 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 ### Tests for US4 *(Red-Green-Refactor — write first, confirm FAILING)*
 
-- [ ] T071 [P] [US4] Write failing unit tests for `MergeSplitRules` in `test/domain/rules/merge_split_test.dart`: merge ≤ 50 produces single Company; merge > 50 produces primary Company of 50 + overflow Company with remainder; split produces two Companies summing to original; split with zero-count role rejected
-- [ ] T072 [P] [US4] Write failing unit tests for `MergeCompanies` use case in `test/domain/use_cases/merge_companies_test.dart`: happy path ≤ 50; overflow ≥ 50 (SC-005); both Companies on same node required; result Companies placed on same node
-- [ ] T073 [P] [US4] Write failing unit tests for `SplitCompany` use case in `test/domain/use_cases/split_company_test.dart`: output counts sum to original; new Company placed on same node; role selection validated against available composition
-- [ ] T074 [P] [US4] Write failing widget test for `SplitSlider` widget in `test/widget/split_slider_test.dart`: live preview updates as slider moves; "Confirm Split" dispatches correct split action; original minus split count shown correctly
+- [x] T071 [P] [US4] Write failing unit tests for `MergeSplitRules` in `test/domain/rules/merge_split_test.dart`: merge ≤ 50 produces single Company; merge > 50 produces primary Company of 50 + overflow Company with remainder; split produces two Companies summing to original; split with zero-count role rejected
+- [x] T072 [P] [US4] Write failing unit tests for `MergeCompanies` use case in `test/domain/use_cases/merge_companies_test.dart`: happy path ≤ 50; overflow ≥ 50 (SC-005); both Companies on same node required; result Companies placed on same node
+- [x] T073 [P] [US4] Write failing unit tests for `SplitCompany` use case in `test/domain/use_cases/split_company_test.dart`: output counts sum to original; new Company placed on same node; role selection validated against available composition
+- [x] T074 [P] [US4] Write failing widget test for `SplitSlider` widget in `test/widget/split_slider_test.dart`: live preview updates as slider moves; "Confirm Split" dispatches correct split action; original minus split count shown correctly
 
 ### Implementation for US4
 
-- [ ] T075 [US4] Implement `lib/domain/rules/merge_split_rules.dart` — `MergeResult merge(Company a, Company b)` returning primary + optional overflow; `SplitResult split(Company c, Map<UnitRole, int> toSplit)` with sum-invariant check; make T071 pass
-- [ ] T076 [US4] Implement `lib/domain/use_cases/merge_companies.dart` — validate same-node, call `MergeSplitRules.merge`, update map state; make T072 pass
-- [ ] T077 [US4] Implement `lib/domain/use_cases/split_company.dart` — validate composition, call `MergeSplitRules.split`, place both Companies on node; make T073 pass
-- [ ] T078 [US4] Update `lib/state/company_notifier.dart` — add `mergeCompanies(String idA, String idB)` and `splitCompany(String id, Map<UnitRole, int> splitMap)` actions wired to respective use cases
-- [ ] T079 [US4] Implement `lib/ui/widgets/split_slider.dart` — per-role sliders bounded by current composition; live preview of resulting Company A and Company B counts; "Confirm Split" button; make T074 pass
-- [ ] T080 [US4] Update `lib/ui/screens/map_screen.dart` — show merge prompt when two friendly Companies are on the same node; open split-slider sheet when a Company is long-pressed; dispatch actions to `CompanyNotifier`
+- [x] T075 [US4] Implement `lib/domain/rules/merge_split_rules.dart` — `MergeResult merge(Company a, Company b)` returning primary + optional overflow; `SplitResult split(Company c, Map<UnitRole, int> toSplit)` with sum-invariant check; make T071 pass
+- [x] T076 [US4] Implement `lib/domain/use_cases/merge_companies.dart` — validate same-node, call `MergeSplitRules.merge`, update map state; make T072 pass
+- [x] T077 [US4] Implement `lib/domain/use_cases/split_company.dart` — validate composition, call `MergeSplitRules.split`, place both Companies on node; make T073 pass
+- [x] T078 [US4] Update `lib/state/company_notifier.dart` — add `mergeCompanies(String idA, String idB)` and `splitCompany(String id, Map<UnitRole, int> splitMap)` actions wired to respective use cases
+- [x] T079 [US4] Implement `lib/ui/widgets/split_slider.dart` — per-role sliders bounded by current composition; live preview of resulting Company A and Company B counts; "Confirm Split" button; make T074 pass
+- [x] T080 [US4] Update `lib/ui/screens/map_screen.dart` — show merge prompt when two friendly Companies are on the same node; open split-slider sheet when a Company is long-pressed; dispatch actions to `CompanyNotifier`
 
 **Checkpoint**: User Story 4 independently testable. `flutter test test/domain/rules/merge_split_test.dart test/widget/split_slider_test.dart` all green.
 

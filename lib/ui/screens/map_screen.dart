@@ -11,6 +11,7 @@ import 'package:iron_and_stone/ui/screens/castle_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
+import 'package:iron_and_stone/ui/widgets/split_slider.dart';
 
 /// The main gameplay screen — renders the map, castle nodes, and Company markers.
 ///
@@ -115,7 +116,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   x: cx,
                   y: cy,
                   isSelected: isSelected,
-                  onTap: () => _onCompanyTap(co, companyState),
+                  onTap: () => _onCompanyTap(context, co, companyState),
+                  onLongPress: co.ownership == Ownership.player
+                      ? () => _onCompanyLongPress(context, co)
+                      : null,
                 ),
               );
             }),
@@ -137,14 +141,108 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // Tap handlers
   // ---------------------------------------------------------------------------
 
-  void _onCompanyTap(CompanyOnMap co, CompanyListState state) {
+  void _onCompanyTap(
+    BuildContext context,
+    CompanyOnMap co,
+    CompanyListState state,
+  ) {
     if (co.ownership != Ownership.player) return;
     final notifier = ref.read(companyNotifierProvider.notifier);
+
+    final selectedId = state.selectedCompanyId;
+
+    if (selectedId != null && selectedId != co.id) {
+      // Check if the currently selected Company is on the same node — offer merge.
+      final selectedCo = state.companies.firstWhere(
+        (c) => c.id == selectedId,
+        orElse: () => co,
+      );
+      if (selectedCo.currentNode.id == co.currentNode.id &&
+          selectedCo.ownership == Ownership.player) {
+        _showMergePrompt(context, selectedCo, co);
+        return;
+      }
+    }
+
     if (state.selectedCompanyId == co.id) {
       notifier.clearSelection();
     } else {
       notifier.selectCompany(co.id);
     }
+  }
+
+  /// Show a merge confirmation dialog for two friendly Companies on the same node.
+  void _showMergePrompt(
+    BuildContext context,
+    CompanyOnMap a,
+    CompanyOnMap b,
+  ) {
+    final totalA = a.company.totalSoldiers.value;
+    final totalB = b.company.totalSoldiers.value;
+    final combined = totalA + totalB;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.parchment,
+        title: const Text(
+          'Merge Companies?',
+          style: TextStyle(color: AppTheme.ironDark),
+        ),
+        content: Text(
+          'Merge Company ($totalA soldiers) with Company ($totalB soldiers)?\n'
+          'Combined: $combined soldiers'
+          '${combined > 50 ? " → primary of 50 + overflow of ${combined - 50}" : ""}.',
+          style: const TextStyle(color: AppTheme.ironDark),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('merge_cancel_button'),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.stone)),
+          ),
+          ElevatedButton(
+            key: const ValueKey('merge_confirm_button'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.bloodRed,
+              foregroundColor: AppTheme.parchment,
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(companyNotifierProvider.notifier).mergeCompanies(a.id, b.id);
+            },
+            child: const Text('Merge'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show the split-slider bottom sheet for a long-pressed player Company.
+  void _onCompanyLongPress(BuildContext context, CompanyOnMap co) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: SplitSlider(
+          key: ValueKey('split_slider_${co.id}'),
+          company: co,
+          onConfirm: (splitMap) {
+            Navigator.of(ctx).pop();
+            ref
+                .read(companyNotifierProvider.notifier)
+                .splitCompany(co.id, splitMap);
+          },
+        ),
+      ),
+    );
   }
 
   void _onNodeTap(
