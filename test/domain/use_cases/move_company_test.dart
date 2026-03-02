@@ -191,5 +191,83 @@ void main() {
         expect(co.currentNode.id, equals(_junction1.id));
       });
     });
+
+    // -------------------------------------------------------------------------
+    // T058c — Reinforcement arrival signal (FR-021)
+    // -------------------------------------------------------------------------
+    group('reinforcement wave routing', () {
+      test(
+          'advance returns ReinforcementArrival when Company arrives at node with active battle',
+          () {
+        // Company is one tick away from junction1 (which has an active battle)
+        // progress = 0.6, warrior speed 6, edge 100 → one more tick = arrives at j1
+        final co = _makeCompany(
+          currentNode: _playerCastle,
+          destination: _junction1,
+          progress: 0.6,
+        );
+
+        final activeBattleNodeIds = {_junction1.id}; // active battle at j1
+
+        final result = useCase.advanceWithBattleCheck(
+          company: co,
+          map: map,
+          tickSeconds: 10.0,
+          activeBattleNodeIds: activeBattleNodeIds,
+        );
+
+        expect(result, isA<ReinforcementArrival>());
+        final arrival = result as ReinforcementArrival;
+        expect(arrival.company.id, equals(co.id));
+        expect(arrival.battleNodeId, equals(_junction1.id));
+      });
+
+      test(
+          'advance returns normal CompanyOnMap when destination node has no active battle',
+          () {
+        final co = _makeCompany(
+          currentNode: _playerCastle,
+          destination: _junction1,
+          progress: 0.6,
+        );
+
+        final result = useCase.advanceWithBattleCheck(
+          company: co,
+          map: map,
+          tickSeconds: 10.0,
+          activeBattleNodeIds: const {}, // no active battles
+        );
+
+        expect(result, isA<CompanyOnMap>());
+      });
+
+      test(
+          'advance with no battle check (empty activeBattleNodeIds) behaves like advance()',
+          () {
+        final co = _makeCompany(
+          currentNode: _playerCastle,
+          destination: _junction1,
+          progress: 0.0,
+        );
+
+        final resultWithCheck = useCase.advanceWithBattleCheck(
+          company: co,
+          map: map,
+          tickSeconds: 10.0,
+          activeBattleNodeIds: const {},
+        );
+
+        final resultNormal = useCase.advance(
+          company: co,
+          map: map,
+          tickSeconds: 10.0,
+        );
+
+        expect(resultWithCheck, isA<CompanyOnMap>());
+        final coWithCheck = resultWithCheck as CompanyOnMap;
+        expect(coWithCheck.currentNode.id, equals(resultNormal.currentNode.id));
+        expect(coWithCheck.progress, closeTo(resultNormal.progress, 0.001));
+      });
+    });
   });
 }
