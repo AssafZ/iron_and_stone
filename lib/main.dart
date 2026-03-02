@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/data/drift/app_database.dart';
 import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
+import 'package:iron_and_stone/ui/screens/main_menu_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 
 void main() {
@@ -24,14 +25,7 @@ class IronAndStoneApp extends StatelessWidget {
     return MaterialApp(
       title: 'Iron and Stone',
       theme: AppTheme.themeData,
-      home: const Scaffold(
-        body: Center(
-          child: Text(
-            'Iron and Stone',
-            style: TextStyle(fontSize: 32),
-          ),
-        ),
-      ),
+      home: const MainMenuScreen(),
     );
   }
 }
