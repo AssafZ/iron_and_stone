@@ -7,15 +7,28 @@ import 'package:iron_and_stone/ui/theme/app_theme.dart';
 ///
 /// Uses [RepaintBoundary] to prevent repaints of unchanged nodes.
 /// Tapping dispatches [onTap] upward; no game logic lives here.
+///
+/// [liveOwnership] overrides [CastleNode.ownership] to reflect real-time
+/// castle captures. [isReachable] highlights the node when a company is
+/// selected and this node is a valid movement destination.
 class MapNodeWidget extends StatelessWidget {
   final MapNode node;
   final bool isSelected;
+
+  /// Live ownership for CastleNodes — reflects captures that occurred during the match.
+  final Ownership? liveOwnership;
+
+  /// True when a company is selected and this node is reachable.
+  final bool isReachable;
+
   final VoidCallback? onTap;
 
   const MapNodeWidget({
     super.key,
     required this.node,
     this.isSelected = false,
+    this.liveOwnership,
+    this.isReachable = false,
     this.onTap,
   });
 
@@ -37,7 +50,9 @@ class MapNodeWidget extends StatelessWidget {
   }
 
   Widget _buildCastleNode(CastleNode castle) {
-    final color = switch (castle.ownership) {
+    // Use liveOwnership (battle results) over the static fixture ownership.
+    final ownership = liveOwnership ?? castle.ownership;
+    final color = switch (ownership) {
       Ownership.player => AppTheme.bloodRed,
       Ownership.ai => AppTheme.midnightBlue,
       Ownership.neutral => AppTheme.stone,
@@ -50,15 +65,24 @@ class MapNodeWidget extends StatelessWidget {
         color: color,
         shape: BoxShape.rectangle,
         borderRadius: BorderRadius.circular(6),
-        border: isSelected
+        border: isReachable
             ? Border.all(color: AppTheme.gold, width: 3)
-            : Border.all(color: AppTheme.ironDark, width: 2),
+            : isSelected
+                ? Border.all(color: AppTheme.gold, width: 3)
+                : Border.all(color: AppTheme.ironDark, width: 2),
         boxShadow: [
-          const BoxShadow(
-            color: Colors.black26,
-            blurRadius: 4,
-            offset: Offset(2, 2),
-          ),
+          if (isReachable)
+            const BoxShadow(
+              color: AppTheme.gold,
+              blurRadius: 8,
+              spreadRadius: 1,
+            )
+          else
+            const BoxShadow(
+              color: Colors.black26,
+              blurRadius: 4,
+              offset: Offset(2, 2),
+            ),
         ],
       ),
       child: const Icon(Icons.castle, color: Colors.white, size: 24),
@@ -70,9 +94,25 @@ class MapNodeWidget extends StatelessWidget {
       width: 20,
       height: 20,
       decoration: BoxDecoration(
-        color: isSelected ? AppTheme.gold : AppTheme.stone,
+        color: isReachable
+            ? AppTheme.gold
+            : isSelected
+                ? AppTheme.gold
+                : AppTheme.stone,
         shape: BoxShape.circle,
-        border: Border.all(color: AppTheme.ironDark, width: 1),
+        border: Border.all(
+          color: isReachable ? AppTheme.ironDark : AppTheme.ironDark,
+          width: isReachable ? 2 : 1,
+        ),
+        boxShadow: isReachable
+            ? [
+                const BoxShadow(
+                  color: AppTheme.gold,
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
     );
   }

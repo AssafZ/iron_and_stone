@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/castle_notifier.dart';
+import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/deployment_panel.dart';
 
-/// Screen showing a castle's garrison, stats, and deployment interface.
+/// Screen showing a castle's garrison, stats, companies stationed here,
+/// and the full deployment interface.
 ///
-/// Watches [CastleNotifier] for live garrison counts and [MatchNotifier] for
-/// the castle node reference. Embeds [DeploymentPanel] for company deployment.
+/// Watches [CastleNotifier] for live garrison counts, [MatchNotifier] for
+/// the castle node reference, and [CompanyNotifier] for stationed companies.
 ///
 /// Contains no game-rule logic — delegates entirely to notifiers and use cases.
 class CastleScreen extends ConsumerWidget {
@@ -22,6 +26,7 @@ class CastleScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final matchAsync = ref.watch(matchNotifierProvider);
     final castleListAsync = ref.watch(castleNotifierProvider);
+    final companyAsync = ref.watch(companyNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,49 +41,90 @@ class CastleScreen extends ConsumerWidget {
         data: (matchState) => castleListAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
-          data: (castleList) {
-            final castleState = castleList
-                .where((c) => c.id == castleId)
-                .firstOrNull;
+          data: (castleList) => companyAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (companyState) {
+              final castleState = castleList
+                  .where((c) => c.id == castleId)
+                  .firstOrNull;
 
-            if (castleState == null) {
-              return const Center(child: Text('Castle not found.'));
-            }
+              if (castleState == null) {
+                return const Center(child: Text('Castle not found.'));
+              }
 
-            // Resolve the CastleNode from the map.
-            final castleNode = matchState.match.map.nodes
-                .whereType<CastleNode>()
-                .where((n) => n.id == castleId)
-                .firstOrNull;
+              // Resolve the CastleNode from the map.
+              final castleNode = matchState.match.map.nodes
+                  .whereType<CastleNode>()
+                  .where((n) => n.id == castleId)
+                  .firstOrNull;
 
-            if (castleNode == null) {
-              return const Center(child: Text('Castle node not found.'));
-            }
+              if (castleNode == null) {
+                return const Center(child: Text('Castle node not found.'));
+              }
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Castle stats card
-                  _CastleStatsCard(castleState: castleState),
-                  const SizedBox(height: 16),
-                  // Garrison card
-                  _GarrisonCard(castleState: castleState),
-                  const SizedBox(height: 16),
-                  // Deployment panel
-                  Card(
-                    elevation: 2,
-                    color: AppTheme.parchment,
-                    child: DeploymentPanel(
-                      castleId: castleId,
-                      castleNode: castleNode,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+              // Companies currently stationed at this castle node.
+              final stationedCompanies = matchState.companies
+                  .where((co) =>
+                      co.currentNode.id == castleId &&
+                      co.destination == null)
+                  .toList();
+
+              // All companies at this node (including those passing through).
+              final allCompaniesHere = matchState.companies
+                  .where((co) => co.currentNode.id == castleId)
+                  .toList();
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Castle stats card
+                    _CastleStatsCard(castleState: castleState),
+                    const SizedBox(height: 16),
+                    // Garrison card
+                    _GarrisonCard(castleState: castleState),
+                    const SizedBox(height: 16),
+                    // Companies at this castle
+                    if (allCompaniesHere.isNotEmpty) ...[
+                      _CompaniesCard(
+                        companies: allCompaniesHere,
+                        castleId: castleId,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    // Deployment panel — only for player castles
+                    if (castleState.ownership == Ownership.player)
+                      Card(
+                        elevation: 2,
+                        color: AppTheme.parchment,
+                        child: DeploymentPanel(
+                          castleId: castleId,
+                          castleNode: castleNode,
+                        ),
+                      )
+                    else
+                      Card(
+                        elevation: 2,
+                        color: AppTheme.parchment,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'Enemy castle — capture it to deploy here.',
+                            style: TextStyle(
+                              color: AppTheme.stone,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -88,6 +134,139 @@ class CastleScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Sub-widgets
 // ---------------------------------------------------------------------------
+
+class _CompaniesCard extends StatelessWidget {
+  const _CompaniesCard({required this.companies, required this.castleId});
+
+  final List<CompanyOnMap> companies;
+  final String castleId;
+
+  String _roleName(UnitRole role) {
+    switch (role) {
+      case UnitRole.peasant:
+        return 'Peasants';
+      case UnitRole.warrior:
+        return 'Warriors';
+      case UnitRole.knight:
+        return 'Knights';
+      case UnitRole.archer:
+        return 'Archers';
+      case UnitRole.catapult:
+        return 'Catapults';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      color: AppTheme.parchment,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.shield, color: AppTheme.ironDark, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Companies here (${companies.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.ironDark,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            ...companies.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final co = entry.value;
+              final isPlayer = co.ownership == Ownership.player;
+              final ownerLabel = isPlayer ? 'Your company' : 'Enemy company';
+              final ownerColor = isPlayer ? AppTheme.bloodRed : AppTheme.midnightBlue;
+              final total = co.company.totalSoldiers.value;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: ownerColor.withAlpha(80)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ExpansionTile(
+                    leading: CircleAvatar(
+                      backgroundColor: ownerColor,
+                      radius: 16,
+                      child: Text(
+                        '$total',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      '$ownerLabel — $total soldiers',
+                      style: TextStyle(
+                        color: AppTheme.ironDark,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: co.destination != null
+                        ? Text(
+                            'Marching to: ${co.destination!.id}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.stone,
+                            ),
+                          )
+                        : const Text(
+                            'Stationed here',
+                            style: TextStyle(fontSize: 12, color: AppTheme.stone),
+                          ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Column(
+                          children: UnitRole.values
+                              .where((r) => (co.company.composition[r] ?? 0) > 0)
+                              .map((role) {
+                            final count = co.company.composition[role] ?? 0;
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _roleName(role),
+                                  style: const TextStyle(color: AppTheme.stone),
+                                ),
+                                Text(
+                                  '$count',
+                                  style: const TextStyle(
+                                    color: AppTheme.ironDark,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _CastleStatsCard extends StatelessWidget {
   const _CastleStatsCard({required this.castleState});

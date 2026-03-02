@@ -30,8 +30,20 @@ class _DeploymentPanelState extends ConsumerState<DeploymentPanel> {
     for (final role in UnitRole.values) role: 0,
   };
 
+  bool _initialised = false;
+
   int get _total => _composition.values.fold(0, (s, v) => s + v);
   bool get _isValid => _total > 0 && _total <= 50;
+
+  /// Pre-select 1 warrior on first build if the garrison has any.
+  void _maybePreselect(Map<UnitRole, int> garrison) {
+    if (_initialised) return;
+    _initialised = true;
+    final warriors = garrison[UnitRole.warrior] ?? 0;
+    if (warriors > 0) {
+      _composition[UnitRole.warrior] = 1;
+    }
+  }
 
   void _increment(UnitRole role, int available) {
     final current = _composition[role] ?? 0;
@@ -57,11 +69,12 @@ class _DeploymentPanelState extends ConsumerState<DeploymentPanel> {
             composition: Map.from(_composition),
             map: matchState.match.map,
           );
-      // Reset composition.
+      // Reset composition and pre-select flag so next open pre-selects again.
       setState(() {
         for (final role in UnitRole.values) {
           _composition[role] = 0;
         }
+        _initialised = false;
       });
       if (context.mounted) {
         Navigator.of(context).maybePop();
@@ -81,6 +94,11 @@ class _DeploymentPanelState extends ConsumerState<DeploymentPanel> {
     final castle = matchState?.castles
         .where((c) => c.id == widget.castleId)
         .firstOrNull;
+
+    // Pre-populate with 1 warrior on first render if garrison allows.
+    if (castle != null) {
+      _maybePreselect(castle.garrison);
+    }
 
     return RepaintBoundary(
       key: const ValueKey('deployment_panel'),

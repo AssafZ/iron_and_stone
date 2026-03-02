@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/data/settings_repository.dart';
+import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
@@ -10,6 +11,7 @@ import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
+import 'package:iron_and_stone/ui/screens/castle_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
@@ -39,16 +41,29 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   bool _showHint = false;
   Timer? _hintTimer;
+  Timer? _gameLoopTimer;
+
+  static const Duration _tickInterval = Duration(seconds: 10);
 
   @override
   void initState() {
     super.initState();
     _checkFirstRunHint();
+    _startGameLoop();
+  }
+
+  void _startGameLoop() {
+    _gameLoopTimer = Timer.periodic(_tickInterval, (_) {
+      if (mounted) {
+        ref.read(matchNotifierProvider.notifier).tick();
+      }
+    });
   }
 
   @override
   void dispose() {
     _hintTimer?.cancel();
+    _gameLoopTimer?.cancel();
     super.dispose();
   }
 
@@ -114,69 +129,135 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final companies = matchState.companies;
     final selectedId = companyState.selectedCompanyId;
 
-    return InteractiveViewer(
-      boundaryMargin: const EdgeInsets.all(80),
-      minScale: 0.5,
-      maxScale: 3.0,
-      child: SizedBox(
-        width: MapScreen._canvasWidth,
-        height: MapScreen._canvasHeight,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Road edges
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _RoadPainter(matchState.match.map.edges),
+    // Build a lookup of live castle ownership by node id.
+    final castleOwnership = {
+      for (final c in matchState.castles) c.id: c.ownership,
+    };
+
+    // Compute reachable nodes when a company is selected (for visual highlight).
+    Set<String> reachableNodeIds = {};
+    if (selectedId != null) {
+      final selectedCo = companyState.companies
+          .where((c) => c.id == selectedId)
+          .firstOrNull;
+      if (selectedCo != null) {
+        reachableNodeIds = matchState.match.map.edges
+            .where((e) => e.from.id == selectedCo.currentNode.id)
+            .map((e) => e.to.id)
+            .toSet();
+        // Also include all other nodes reachable via pathfinding (full path highlighting)
+        for (final node in nodes) {
+          final path = matchState.match.map.pathBetween(selectedCo.currentNode, node);
+          if (path.isNotEmpty) reachableNodeIds.add(node.id);
+        }
+      }
+    }
+
+    return Column(
+      children: [
+        // Movement hint banner shown when a company is selected.
+        if (selectedId != null)
+          Container(
+            key: const ValueKey('move_hint_banner'),
+            color: AppTheme.gold.withAlpha(220),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.touch_app, color: AppTheme.ironDark, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Company selected — tap any node to march there',
+                    style: TextStyle(
+                      color: AppTheme.ironDark,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => ref.read(companyNotifierProvider.notifier).clearSelection(),
+                  child: const Icon(Icons.close, color: AppTheme.ironDark, size: 18),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: InteractiveViewer(
+            boundaryMargin: const EdgeInsets.all(80),
+            minScale: 0.5,
+            maxScale: 3.0,
+            child: SizedBox(
+              width: MapScreen._canvasWidth,
+              height: MapScreen._canvasHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Road edges
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _RoadPainter(matchState.match.map.edges),
+                    ),
+                  ),
+                  // Map nodes
+                  ...nodes.map((node) {
+                    final (cx, cy) = _nodeCanvasPos(node);
+                    final nodeKey = _nodeKey(node);
+                    final liveOwnership = node is CastleNode
+                        ? (castleOwnership[node.id] ?? node.ownership)
+                        : null;
+                    final isReachable = selectedId != null && reachableNodeIds.contains(node.id);
+
+                    return Positioned(
+                      left: cx - 24,
+                      top: cy - 24,
+                      child: MapNodeWidget(
+                        key: ValueKey(nodeKey),
+                        node: node,
+                        liveOwnership: liveOwnership,
+                        isReachable: isReachable,
+                        onTap: () => _onNodeTap(context, node, matchState, companyState),
+                      ),
+                    );
+                  }),
+                  // Company markers — only show player companies and companies at
+                  // nodes the player can see (all castles + road nodes are always visible).
+                  // AI companies are visible (fog-of-war is out of scope for MVP).
+                  ...companies.map((co) {
+                    final (cx, cy) = _nodeCanvasPos(co.currentNode);
+                    final isSelected = co.id == selectedId;
+
+                    return Positioned(
+                      left: cx - 18,
+                      top: cy - 18,
+                      child: CompanyMarker(
+                        key: ValueKey('company_marker_${co.id}'),
+                        company: co,
+                        x: cx,
+                        y: cy,
+                        isSelected: isSelected,
+                        onTap: () => _onCompanyTap(context, co, companyState),
+                        onLongPress: co.ownership == Ownership.player
+                            ? () => _onCompanyLongPress(context, co)
+                            : null,
+                      ),
+                    );
+                  }),
+                  // Selection indicator overlay (tested via key)
+                  if (selectedId != null)
+                    Positioned(
+                      key: ValueKey('company_selected_$selectedId'),
+                      left: 0,
+                      top: 0,
+                      child: const SizedBox.shrink(),
+                    ),
+                ],
               ),
             ),
-            // Map nodes
-            ...nodes.map((node) {
-              final (cx, cy) = _nodeCanvasPos(node);
-              final nodeKey = _nodeKey(node);
-
-              return Positioned(
-                left: cx - 24,
-                top: cy - 24,
-                child: MapNodeWidget(
-                  key: ValueKey(nodeKey),
-                  node: node,
-                  onTap: () => _onNodeTap(context, node, matchState, companyState),
-                ),
-              );
-            }),
-            // Company markers
-            ...companies.map((co) {
-              final (cx, cy) = _nodeCanvasPos(co.currentNode);
-              final isSelected = co.id == selectedId;
-
-              return Positioned(
-                left: cx - 18,
-                top: cy - 18,
-                child: CompanyMarker(
-                  key: ValueKey('company_marker_${co.id}'),
-                  company: co,
-                  x: cx,
-                  y: cy,
-                  isSelected: isSelected,
-                  onTap: () => _onCompanyTap(context, co, companyState),
-                  onLongPress: co.ownership == Ownership.player
-                      ? () => _onCompanyLongPress(context, co)
-                      : null,
-                ),
-              );
-            }),
-            // Selection indicator overlay (tested via key)
-            if (selectedId != null)
-              Positioned(
-                key: ValueKey('company_selected_$selectedId'),
-                left: 0,
-                top: 0,
-                child: const SizedBox.shrink(),
-              ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -194,9 +275,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final selectedId = state.selectedCompanyId;
 
+    // Use the authoritative match-state company list for merge check.
+    final authoritativeCompanies =
+        ref.read(matchNotifierProvider).valueOrNull?.companies ?? state.companies;
+
     if (selectedId != null && selectedId != co.id) {
       // Check if the currently selected Company is on the same node — offer merge.
-      final selectedCo = state.companies.firstWhere(
+      final selectedCo = authoritativeCompanies.firstWhere(
         (c) => c.id == selectedId,
         orElse: () => co,
       );
@@ -297,7 +382,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final selectedId = companyState.selectedCompanyId;
 
     if (selectedId != null) {
-      // Second tap: assign destination.
+      // A company is selected — any node tap assigns it as a movement destination.
       ref.read(companyNotifierProvider.notifier).setDestination(
             companyId: selectedId,
             destination: node,
@@ -306,10 +391,114 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    // No selection: if tapping player castle, show deploy bottom sheet.
-    if (node is CastleNode && node.ownership == Ownership.player) {
-      showDeploySheet(context, ref, matchState, node);
+    // No selection: if tapping a castle, open the castle sheet.
+    if (node is CastleNode) {
+      _showCastleSheet(context, node, matchState);
     }
+  }
+
+  /// Bottom sheet shown when a castle node is tapped with no company selected.
+  ///
+  /// Shows a quick-deploy button AND a "Manage" button that navigates to
+  /// [CastleScreen] for full garrison management.
+  void _showCastleSheet(
+    BuildContext context,
+    CastleNode castleNode,
+    MatchState matchState,
+  ) {
+    final castle = matchState.castles.firstWhere((c) => c.id == castleNode.id);
+    final garrisonWarriors = castle.garrison[UnitRole.warrior] ?? 0;
+    final deployCount = garrisonWarriors >= 5 ? 5 : garrisonWarriors;
+    final isPlayerCastle = castle.ownership == Ownership.player;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.castle,
+                    color: isPlayerCastle ? AppTheme.bloodRed : AppTheme.midnightBlue,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isPlayerCastle ? 'Your Castle' : 'Enemy Castle',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.ironDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Garrison: ${castle.garrison.values.fold(0, (s, v) => s + v)} soldiers',
+                style: const TextStyle(color: AppTheme.stone, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              if (isPlayerCastle && deployCount > 0) ...[
+                ElevatedButton.icon(
+                  key: const ValueKey('deploy_company_button'),
+                  icon: const Icon(Icons.shield),
+                  label: Text('Quick Deploy $deployCount Warriors'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    ref.read(companyNotifierProvider.notifier).deployCompany(
+                      castleId: castle.id,
+                      castleNode: castleNode,
+                      composition: {UnitRole.warrior: deployCount},
+                      map: matchState.match.map,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.bloodRed,
+                    foregroundColor: AppTheme.parchment,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ] else if (isPlayerCastle) ...[
+                const Text(
+                  'No warriors available to deploy.',
+                  style: TextStyle(color: AppTheme.stone),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+              ],
+              OutlinedButton.icon(
+                icon: const Icon(Icons.manage_accounts),
+                label: const Text('Manage Castle'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CastleScreen(castleId: castleNode.id),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.ironDark,
+                  side: const BorderSide(color: AppTheme.ironDark),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -399,6 +588,10 @@ class _FirstRunHintOverlay extends StatelessWidget {
 // Road painter
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Road painter
+// ---------------------------------------------------------------------------
+
 class _RoadPainter extends CustomPainter {
   final List<RoadEdge> edges;
 
@@ -438,71 +631,3 @@ class _RoadPainter extends CustomPainter {
   bool shouldRepaint(_RoadPainter old) => false;
 }
 
-// ---------------------------------------------------------------------------
-// Deploy bottom sheet helper (used by the screen)
-// ---------------------------------------------------------------------------
-
-/// Shows the deploy confirmation bottom sheet for a player castle.
-///
-/// Provides a simple "Deploy 5 Warriors" button for the MVP skeleton.
-Future<void> showDeploySheet(
-  BuildContext context,
-  WidgetRef ref,
-  MatchState matchState,
-  CastleNode castleNode,
-) async {
-  final castle = matchState.castles.firstWhere((c) => c.id == castleNode.id);
-  final garrisonWarriors = castle.garrison[UnitRole.warrior] ?? 0;
-  final deployCount = garrisonWarriors >= 5 ? 5 : garrisonWarriors;
-
-  if (deployCount <= 0) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No warriors available to deploy.')),
-    );
-    return;
-  }
-
-  await showModalBottomSheet<void>(
-    context: context,
-    builder: (ctx) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Deploy Company from ${castle.id}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.ironDark,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Warriors available: $garrisonWarriors'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                key: const ValueKey('deploy_company_button'),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  ref.read(companyNotifierProvider.notifier).deployCompany(
-                    castleId: castle.id,
-                    castleNode: castleNode,
-                    composition: {UnitRole.warrior: deployCount},
-                    map: matchState.match.map,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.bloodRed,
-                  foregroundColor: AppTheme.parchment,
-                ),
-                child: Text('Deploy $deployCount Warriors'),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}

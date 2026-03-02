@@ -120,18 +120,25 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     required MapNode destination,
     required GameMap map,
   }) async {
+    // Use the authoritative match-state company list so tick-advanced
+    // positions are always up to date.
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
+    final authoritativeList = matchState?.companies ?? [];
     final current = state.valueOrNull ?? const CompanyListState();
-    final idx = current.companies.indexWhere((c) => c.id == companyId);
+
+    // Find in authoritative list first, fallback to local.
+    final sourceList = authoritativeList.isNotEmpty ? authoritativeList : current.companies;
+    final idx = sourceList.indexWhere((c) => c.id == companyId);
     if (idx < 0) return;
 
-    final company = current.companies[idx];
+    final company = sourceList[idx];
     final updated = const MoveCompany().setDestination(
       company: company,
       destination: destination,
       map: map,
     );
 
-    final newList = List<CompanyOnMap>.from(current.companies)..[idx] = updated;
+    final newList = List<CompanyOnMap>.from(sourceList)..[idx] = updated;
     state = AsyncData(current.copyWith(companies: newList, selectedCompanyId: null));
 
     ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
@@ -146,9 +153,13 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
   /// Delegates to [MergeCompanies] use case.
   /// Removes both input Companies from the list and adds the result(s).
   Future<void> mergeCompanies(String idA, String idB) async {
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
+    final sourceList = matchState?.companies ??
+        (state.valueOrNull ?? const CompanyListState()).companies;
     final current = state.valueOrNull ?? const CompanyListState();
-    final a = current.companies.firstWhere((c) => c.id == idA);
-    final b = current.companies.firstWhere((c) => c.id == idB);
+
+    final a = sourceList.firstWhere((c) => c.id == idA);
+    final b = sourceList.firstWhere((c) => c.id == idB);
 
     final newPrimaryId = 'co${_idCounter++}';
     final newOverflowId = 'co${_idCounter++}';
@@ -160,7 +171,7 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
       overflowId: newOverflowId,
     );
 
-    final remaining = current.companies
+    final remaining = sourceList
         .where((c) => c.id != idA && c.id != idB)
         .toList();
     remaining.add(result.primary);
@@ -180,11 +191,15 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
   /// Replaces the original Company in the list with the kept Company and adds
   /// the new split-off Company.
   Future<void> splitCompany(String id, Map<UnitRole, int> splitMap) async {
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
+    final sourceList = matchState?.companies ??
+        (state.valueOrNull ?? const CompanyListState()).companies;
     final current = state.valueOrNull ?? const CompanyListState();
-    final idx = current.companies.indexWhere((c) => c.id == id);
+
+    final idx = sourceList.indexWhere((c) => c.id == id);
     if (idx < 0) return;
 
-    final original = current.companies[idx];
+    final original = sourceList[idx];
     final newSplitId = 'co${_idCounter++}';
 
     final result = const SplitCompany().split(
@@ -194,7 +209,7 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
       splitId: newSplitId,
     );
 
-    final updated = List<CompanyOnMap>.from(current.companies);
+    final updated = List<CompanyOnMap>.from(sourceList);
     updated[idx] = result.kept;
     updated.add(result.splitOff);
 
