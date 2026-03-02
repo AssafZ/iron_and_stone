@@ -30,24 +30,22 @@ void main() {
       expect(find.byKey(const ValueKey('castle_node_player_castle')), findsOneWidget);
       expect(find.byKey(const ValueKey('castle_node_ai_castle')), findsOneWidget);
 
-      // Deploy a Company so the golden includes a marker.
-      await tester.tap(find.byKey(const ValueKey('castle_node_player_castle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('deploy_company_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('company_marker_co0')), findsOneWidget);
+      // Game starts with a player company already placed — no deploy step needed.
+      expect(find.byKey(const ValueKey('company_marker_player_co0')), findsOneWidget);
 
       await screenMatchesGolden(tester, 'map_rendering_with_company');
     });
 
-    testGoldens('map renders without companies (empty state)', (tester) async {
+    testGoldens('map renders with starting companies visible', (tester) async {
       await tester.pumpWidgetBuilder(
         const ProviderScope(child: MapScreen()),
         wrapper: materialAppWrapper(theme: ThemeData.light()),
         surfaceSize: const Size(800, 600),
       );
       await tester.pumpAndSettle();
+
+      // Both player and AI companies are on the map from game start.
+      expect(find.byKey(const ValueKey('company_marker_player_co0')), findsOneWidget);
 
       await screenMatchesGolden(tester, 'map_rendering_empty');
     });

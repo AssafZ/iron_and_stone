@@ -1,6 +1,7 @@
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
+import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 
 /// The kind of battle trigger detected.
@@ -52,6 +53,13 @@ final class CompanyOnMap {
   /// Fractional progress toward the next node along the current road edge [0.0, 1.0).
   final double progress;
 
+  /// Accumulated fractional growth per role, carried between ticks.
+  ///
+  /// Slower-growing roles (warriors, knights, catapults) accumulate a fraction
+  /// each tick until it reaches 1.0, at which point a whole soldier is added
+  /// and the remainder is kept for the next tick.
+  final Map<UnitRole, double> growthRemainder;
+
   const CompanyOnMap({
     required this.company,
     required this.id,
@@ -59,6 +67,7 @@ final class CompanyOnMap {
     required this.currentNode,
     this.destination,
     this.progress = 0.0,
+    this.growthRemainder = const {},
   });
 
   /// Sentinel used to distinguish "caller passed null explicitly" from
@@ -72,6 +81,7 @@ final class CompanyOnMap {
     MapNode? currentNode,
     Object? destination = _destinationSentinel,
     double? progress,
+    Map<UnitRole, double>? growthRemainder,
   }) {
     return CompanyOnMap(
       company: company ?? this.company,
@@ -82,6 +92,7 @@ final class CompanyOnMap {
           ? this.destination
           : destination as MapNode?,
       progress: progress ?? this.progress,
+      growthRemainder: growthRemainder ?? this.growthRemainder,
     );
   }
 

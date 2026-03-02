@@ -6,7 +6,6 @@ import 'package:iron_and_stone/data/settings_repository.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
-import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
@@ -454,17 +453,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   /// Bottom sheet shown when a castle node is tapped with no company selected.
   ///
-  /// Shows a quick-deploy button AND a "Manage" button that navigates to
-  /// [CastleScreen] for full garrison management.
+  /// Shows castle info and a "Manage Castle" button that navigates to
+  /// [CastleScreen].
   void _showCastleSheet(
     BuildContext context,
     CastleNode castleNode,
     MatchState matchState,
   ) {
     final castle = matchState.castles.firstWhere((c) => c.id == castleNode.id);
-    final garrisonWarriors = castle.garrison[UnitRole.warrior] ?? 0;
-    final deployCount = garrisonWarriors >= 5 ? 5 : garrisonWarriors;
     final isPlayerCastle = castle.ownership == Ownership.player;
+    final stationedCount = matchState.companies
+        .where((co) => co.currentNode.id == castleNode.id && co.destination == null)
+        .length;
 
     showModalBottomSheet<void>(
       context: context,
@@ -501,54 +501,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Garrison: ${castle.garrison.values.fold(0, (s, v) => s + v)} soldiers',
+                'Companies stationed: $stationedCount',
                 style: const TextStyle(color: AppTheme.stone, fontSize: 14),
               ),
               const SizedBox(height: 16),
-              if (isPlayerCastle && deployCount > 0) ...[
-                ElevatedButton.icon(
-                  key: const ValueKey('deploy_company_button'),
-                  icon: const Icon(Icons.shield),
-                  label: Text('Quick Deploy $deployCount Warriors'),
+              if (isPlayerCastle) ...[
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.manage_accounts),
+                  label: const Text('Manage Castle'),
                   onPressed: () {
                     Navigator.of(ctx).pop();
-                    ref.read(companyNotifierProvider.notifier).deployCompany(
-                      castleId: castle.id,
-                      castleNode: castleNode,
-                      composition: {UnitRole.warrior: deployCount},
-                      map: matchState.match.map,
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CastleScreen(castleId: castleNode.id),
+                      ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.bloodRed,
-                    foregroundColor: AppTheme.parchment,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.ironDark,
+                    side: const BorderSide(color: AppTheme.ironDark),
                   ),
                 ),
-                const SizedBox(height: 8),
-              ] else if (isPlayerCastle) ...[
-                const Text(
-                  'No warriors available to deploy.',
-                  style: TextStyle(color: AppTheme.stone),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
               ],
-              OutlinedButton.icon(
-                icon: const Icon(Icons.manage_accounts),
-                label: const Text('Manage Castle'),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => CastleScreen(castleId: castleNode.id),
-                    ),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.ironDark,
-                  side: const BorderSide(color: AppTheme.ironDark),
-                ),
-              ),
             ],
           ),
         ),

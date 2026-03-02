@@ -1,5 +1,6 @@
 import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
@@ -165,11 +166,12 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
   static MatchState _buildInitialState() {
     final map = GameMapFixture.build();
 
+    // Castles start with no garrison — all soldiers are in companies.
     final castles = map.nodes.whereType<CastleNode>().map((node) {
       return Castle(
         id: node.id,
         ownership: node.ownership,
-        garrison: _defaultGarrison(),
+        garrison: const {},
       );
     }).toList();
 
@@ -179,16 +181,42 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
       phase: MatchPhase.playing,
     );
 
-    return MatchState(match: match, castles: castles, companies: []);
-  }
+    // Each side starts with one company stationed at their castle.
+    final playerCastleNode = map.nodes
+        .whereType<CastleNode>()
+        .firstWhere((n) => n.ownership == Ownership.player);
+    final aiCastleNode = map.nodes
+        .whereType<CastleNode>()
+        .firstWhere((n) => n.ownership == Ownership.ai);
 
-  static Map<UnitRole, int> _defaultGarrison() => {
-        UnitRole.peasant: 5,
-        UnitRole.warrior: 20,
-        UnitRole.knight: 5,
-        UnitRole.archer: 10,
-        UnitRole.catapult: 2,
-      };
+    final startingComposition = {
+      UnitRole.warrior: 3,
+      UnitRole.archer: 3,
+      UnitRole.peasant: 2,
+      UnitRole.knight: 1,
+      UnitRole.catapult: 1,
+    };
+
+    final playerCompany = CompanyOnMap(
+      id: 'player_co0',
+      ownership: Ownership.player,
+      currentNode: playerCastleNode,
+      company: Company(composition: Map.from(startingComposition)),
+    );
+
+    final aiCompany = CompanyOnMap(
+      id: 'ai_co0',
+      ownership: Ownership.ai,
+      currentNode: aiCastleNode,
+      company: Company(composition: Map.from(startingComposition)),
+    );
+
+    return MatchState(
+      match: match,
+      castles: castles,
+      companies: [playerCompany, aiCompany],
+    );
+  }
 }
 
 /// Provides the [MatchDao] used for game-state persistence.

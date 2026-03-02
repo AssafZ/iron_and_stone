@@ -35,7 +35,7 @@ void main() {
       expect(find.byKey(const ValueKey('castle_node_ai_castle')), findsOneWidget);
     });
 
-    testWidgets('Company marker appears after deploy action', (tester) async {
+    testWidgets('Company marker is visible from game start (no deploy needed)', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(home: MapScreen()),
@@ -43,19 +43,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap the player castle to open deploy options.
-      await tester.tap(find.byKey(const ValueKey('castle_node_player_castle')));
-      await tester.pumpAndSettle();
-
-      // Deploy button or deploy sheet should appear.
-      expect(find.byKey(const ValueKey('deploy_company_button')), findsOneWidget);
-
-      // Tap deploy.
-      await tester.tap(find.byKey(const ValueKey('deploy_company_button')));
-      await tester.pumpAndSettle();
-
-      // A Company marker should now be visible.
-      expect(find.byKey(const ValueKey('company_marker_co0')), findsOneWidget);
+      // Game starts with a player company already placed — no deploy needed.
+      expect(
+        find.descendant(
+          of: find.byType(MapScreen),
+          matching: find.byType(CompanyMarker),
+        ),
+        findsAtLeastNWidgets(1),
+      );
     });
 
     testWidgets('tapping a node sends movement intent to notifier',
@@ -67,14 +62,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Deploy a company first.
-      await tester.tap(find.byKey(const ValueKey('castle_node_player_castle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('deploy_company_button')));
-      await tester.pumpAndSettle();
+      // Find the player company marker (already on map from game start).
+      final markerFinder = find.descendant(
+        of: find.byType(MapScreen),
+        matching: find.byType(CompanyMarker),
+      );
+      expect(markerFinder, findsAtLeastNWidgets(1));
+      final playerMarker = find.byKey(const ValueKey('company_marker_player_co0'));
 
       // Select the company marker (first tap).
-      await tester.tap(find.byKey(const ValueKey('company_marker_co0')));
+      await tester.tap(playerMarker);
       await tester.pumpAndSettle();
 
       // Tap a destination node (second tap) — movement is assigned.
@@ -82,7 +79,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // No crash is the primary assertion; marker must still be visible.
-      expect(find.byKey(const ValueKey('company_marker_co0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('company_marker_player_co0')), findsOneWidget);
     });
 
     // T037a — Two-step Company selection UX
@@ -96,25 +93,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Deploy a company.
-      await tester.tap(find.byKey(const ValueKey('castle_node_player_castle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('deploy_company_button')));
-      await tester.pumpAndSettle();
+      // Game starts with a player company already on the map.
+      final playerMarker = find.byKey(const ValueKey('company_marker_player_co0'));
+      expect(playerMarker, findsOneWidget);
 
       // First tap: select company marker → selectedCompanyId should be set.
-      await tester.tap(find.byKey(const ValueKey('company_marker_co0')));
+      await tester.tap(playerMarker);
       await tester.pumpAndSettle();
 
       // Selection indicator should appear.
-      expect(find.byKey(const ValueKey('company_selected_co0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('company_selected_player_co0')), findsOneWidget);
 
       // Second tap on destination node → assignment + clear selection.
       await tester.tap(find.byKey(const ValueKey('junction_node_j1')));
       await tester.pumpAndSettle();
 
       // Selection indicator should be gone.
-      expect(find.byKey(const ValueKey('company_selected_co0')), findsNothing);
+      expect(find.byKey(const ValueKey('company_selected_player_co0')), findsNothing);
     });
 
     testWidgets(
@@ -127,18 +122,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Deploy a company.
-      await tester.tap(find.byKey(const ValueKey('castle_node_player_castle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('deploy_company_button')));
-      await tester.pumpAndSettle();
-
       // Tap a node WITHOUT selecting a company first — no crash, no movement.
       await tester.tap(find.byKey(const ValueKey('junction_node_j1')));
       await tester.pumpAndSettle();
 
-      // Company is still at player castle (no movement assigned).
-      expect(find.byKey(const ValueKey('company_marker_co0')), findsOneWidget);
+      // Company should still be visible (no movement assigned without selection).
+      expect(
+        find.descendant(
+          of: find.byType(MapScreen),
+          matching: find.byType(CompanyMarker),
+        ),
+        findsAtLeastNWidgets(1),
+      );
     });
 
     // T058e — Castle ownership re-render after transfer

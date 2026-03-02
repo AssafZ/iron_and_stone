@@ -55,16 +55,10 @@ final class NoAction extends AiAction {
 /// imports).
 ///
 /// Decision priority per tick:
-/// 1. **Deploy** — when the AI garrison total ≥ 10 units and there is at least
-///    one stationary AI Company slot available (i.e., no existing AI Company
-///    without a destination), deploy a Company of up to 50 soldiers.
-/// 2. **Move** — when an AI Company exists without a destination, assign it to
+/// 1. **Move** — when an AI Company exists without a destination, assign it to
 ///    march toward the nearest non-AI castle.
-/// 3. **NoAction** — garrison is too small AND no Companies need orders.
+/// 2. **NoAction** — all Companies already have orders.
 final class AiController {
-  /// Minimum garrison total required for the AI to deploy a new Company.
-  static const int _deployThreshold = 10;
-
   /// Maximum soldiers per Company (spec cap).
   static const int _companyCap = 50;
 
@@ -80,12 +74,11 @@ final class AiController {
     required List<Castle> castles,
     required List<CompanyOnMap> companies,
   }) {
-    final aiCastle = _findAiCastle(castles);
     final aiCompanies = companies
         .where((c) => c.ownership == Ownership.ai)
         .toList();
 
-    // 1. Check for a stationary AI Company that needs a move order.
+    // Move any stationary AI Company toward the nearest non-AI castle.
     final stationaryCompany =
         aiCompanies.where((c) => c.destination == null).firstOrNull;
 
@@ -102,55 +95,12 @@ final class AiController {
       }
     }
 
-    // 2. Deploy if garrison is large enough.
-    if (aiCastle != null) {
-      final garrisonTotal =
-          aiCastle.garrison.values.fold(0, (s, v) => s + v);
-
-      if (garrisonTotal >= _deployThreshold) {
-        final composition = _buildDeployComposition(aiCastle);
-        return DeployAction(
-          castleId: aiCastle.id,
-          composition: composition,
-        );
-      }
-    }
-
     return const NoAction();
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
-
-  /// Find the AI-owned [Castle], or null if none exists.
-  Castle? _findAiCastle(List<Castle> castles) {
-    for (final castle in castles) {
-      if (castle.ownership == Ownership.ai) return castle;
-    }
-    return null;
-  }
-
-  /// Build a composition of up to [_companyCap] soldiers from the AI garrison.
-  ///
-  /// Strategy: take all available units, capped at [_companyCap] total.
-  /// Distributes evenly across roles present.
-  Map<UnitRole, int> _buildDeployComposition(Castle castle) {
-    final composition = <UnitRole, int>{};
-    var remaining = _companyCap;
-
-    for (final entry in castle.garrison.entries) {
-      if (entry.value <= 0) continue;
-      final take = entry.value.clamp(0, remaining);
-      if (take > 0) {
-        composition[entry.key] = take;
-        remaining -= take;
-      }
-      if (remaining <= 0) break;
-    }
-
-    return composition;
-  }
 
   /// Find the nearest castle node not owned by the AI, measured by Euclidean
   /// distance from [from].

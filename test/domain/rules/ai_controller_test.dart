@@ -46,15 +46,17 @@ GameMap _makeMinimalMap() {
 void main() {
   group('AiController', () {
     // -------------------------------------------------------------------------
-    // deploy action
+    // No garrison-based deploy — AI starts with a company
     // -------------------------------------------------------------------------
-    group('decide — deploy action', () {
-      test('returns DeployAction when AI garrison >= 10 units', () {
+    group('decide — no deploy from garrison', () {
+      test(
+          'returns NoAction (not DeployAction) even when AI castle garrison has units',
+          () {
+        // Garrison is unused — AI does not deploy from it.
         final map = _makeMinimalMap();
-        final aiCastleNode =
-            map.nodes.whereType<CastleNode>().firstWhere(
-              (n) => n.ownership == Ownership.ai,
-            );
+        final aiCastleNode = map.nodes
+            .whereType<CastleNode>()
+            .firstWhere((n) => n.ownership == Ownership.ai);
         final aiCastle = Castle(
           id: aiCastleNode.id,
           ownership: Ownership.ai,
@@ -72,48 +74,55 @@ void main() {
           companies: [],
         );
 
-        expect(action, isA<DeployAction>());
-        final deploy = action as DeployAction;
-        expect(
-          deploy.composition.values.fold(0, (s, v) => s + v),
-          greaterThan(0),
-        );
-        expect(deploy.castleId, equals(aiCastleNode.id));
+        // With no stationary AI company, no move order — NoAction.
+        expect(action, isA<NoAction>());
       });
 
       test(
-          'returns DeployAction when AI garrison >= 10 and no AI companies yet',
+          'returns MoveAction (not DeployAction) when AI has a stationary company and garrison has units',
           () {
-        final map = GameMapFixture.build();
-        final aiCastleNode =
-            map.nodes.whereType<CastleNode>().firstWhere(
-              (n) => n.ownership == Ownership.ai,
-            );
+        final map = _makeMinimalMap();
+        final aiCastleNode = map.nodes
+            .whereType<CastleNode>()
+            .firstWhere((n) => n.ownership == Ownership.ai);
+        final playerCastleNode = map.nodes
+            .whereType<CastleNode>()
+            .firstWhere((n) => n.ownership == Ownership.player);
         final aiCastle = Castle(
           id: aiCastleNode.id,
           ownership: Ownership.ai,
           garrison: {UnitRole.warrior: 15, UnitRole.archer: 5},
         );
         final playerCastle = Castle(
-          id: GameMapFixture.playerCastleId,
+          id: 'pc',
           ownership: Ownership.player,
           garrison: {},
+        );
+        final aiCompany = CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: 'ai_co0',
+          ownership: Ownership.ai,
+          currentNode: aiCastleNode,
+          destination: null,
         );
 
         final action = const AiController().decide(
           map: map,
           castles: [playerCastle, aiCastle],
-          companies: [],
+          companies: [aiCompany],
         );
-        expect(action, isA<DeployAction>());
+
+        // Move action, not deploy.
+        expect(action, isA<MoveAction>());
+        final move = action as MoveAction;
+        expect(move.destination.id, equals(playerCastleNode.id));
       });
 
-      test('DeployAction composition total does not exceed 50', () {
+      test('decide never returns a DeployAction', () {
         final map = _makeMinimalMap();
-        final aiCastleNode =
-            map.nodes.whereType<CastleNode>().firstWhere(
-              (n) => n.ownership == Ownership.ai,
-            );
+        final aiCastleNode = map.nodes
+            .whereType<CastleNode>()
+            .firstWhere((n) => n.ownership == Ownership.ai);
         final aiCastle = Castle(
           id: aiCastleNode.id,
           ownership: Ownership.ai,
@@ -133,10 +142,7 @@ void main() {
           castles: [playerCastle, aiCastle],
           companies: [],
         );
-        expect(action, isA<DeployAction>());
-        final deploy = action as DeployAction;
-        final total = deploy.composition.values.fold(0, (s, v) => s + v);
-        expect(total, lessThanOrEqualTo(50));
+        expect(action, isNot(isA<DeployAction>()));
       });
     });
 

@@ -1,8 +1,9 @@
-// T082 — Failing integration test for AI opponent autonomous behaviour.
-// Red-Green-Refactor: tests must FAIL before AiController is wired into TickMatch.
+// T082 — Integration tests for AI opponent autonomous behaviour.
+// AI starts with a pre-placed company and issues MoveActions — no garrison deploy.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
@@ -16,18 +17,32 @@ import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Build the standard fixture castles with a generous AI garrison (>= 10 units
-/// on each role) so that the AI's deploy threshold is immediately met.
+/// Build the standard fixture castles with empty garrisons.
 List<Castle> _buildCastles(GameMap map) {
   return map.nodes.whereType<CastleNode>().map((node) {
-    final garrison = node.ownership == Ownership.ai
-        ? {UnitRole.warrior: 30, UnitRole.archer: 10}
-        : {UnitRole.warrior: 10};
-    return Castle(id: node.id, ownership: node.ownership, garrison: garrison);
+    return Castle(id: node.id, ownership: node.ownership, garrison: const {});
   }).toList();
 }
 
-/// Advance a [TickResult] state forward by [ticks] ticks using [TickMatch].
+/// Build the starting companies: one per side, stationed at their castle.
+List<CompanyOnMap> _buildStartingCompanies(GameMap map) {
+  return map.nodes.whereType<CastleNode>().map((node) {
+    return CompanyOnMap(
+      id: '${node.ownership.name}_co0',
+      ownership: node.ownership,
+      currentNode: node,
+      company: Company(composition: {
+        UnitRole.warrior: 3,
+        UnitRole.archer: 3,
+        UnitRole.peasant: 2,
+        UnitRole.knight: 1,
+        UnitRole.catapult: 1,
+      }),
+    );
+  }).toList();
+}
+
+/// Advance state forward by [ticks] ticks using [TickMatch].
 ({List<Castle> castles, List<CompanyOnMap> companies}) _runTicks({
   required GameMap map,
   required List<Castle> castles,
@@ -64,82 +79,65 @@ List<Castle> _buildCastles(GameMap map) {
 void main() {
   group('AI opponent integration', () {
     test(
-        'AI deploys >= 1 Company after 30 s (3 ticks) when garrison >= 10 units',
+        'AI company exists from game start (no deployment needed)',
         () {
       final map = GameMapFixture.build();
-      final castles = _buildCastles(map);
+      final companies = _buildStartingCompanies(map);
 
-      final result = _runTicks(
-        map: map,
-        castles: castles,
-        companies: [],
-        ticks: 3, // 3 ticks × 10 s = 30 s
-      );
-
-      final aiCompanies = result.companies
+      final aiCompanies = companies
           .where((c) => c.ownership == Ownership.ai)
           .toList();
 
       expect(
         aiCompanies.length,
         greaterThanOrEqualTo(1),
-        reason: 'AI must have deployed at least 1 Company within 30 s',
+        reason: 'AI must have a Company from game start',
       );
     });
 
     test(
-        'AI Company has moved toward player castle after 60 s (6 ticks)',
+        'AI Company has moved toward player castle after 30 s (3 ticks)',
         () {
       final map = GameMapFixture.build();
       final castles = _buildCastles(map);
+      final companies = _buildStartingCompanies(map);
 
-      // Run 3 ticks to get initial deployment.
-      final afterDeploy = _runTicks(
+      // Run 3 ticks (30 s).
+      final result = _runTicks(
         map: map,
         castles: castles,
-        companies: [],
+        companies: companies,
         ticks: 3,
       );
 
-      // Run 3 more ticks (total 6 = 60 s).
-      final afterMove = _runTicks(
-        map: map,
-        castles: afterDeploy.castles,
-        companies: afterDeploy.companies,
-        ticks: 3,
-      );
-
-      final aiCompanies = afterMove.companies
+      final aiCompanies = result.companies
           .where((c) => c.ownership == Ownership.ai)
           .toList();
 
       expect(aiCompanies, isNotEmpty,
-          reason: 'AI Company must still exist after 60 s');
+          reason: 'AI Company must still exist after 30 s');
 
       final aiCastleNode = map.nodes
           .whereType<CastleNode>()
           .firstWhere((n) => n.ownership == Ownership.ai);
 
-      // At least one AI Company should have moved away from the AI castle
-      // (either progress > 0 or on a different node).
+      // At least one AI Company should have moved away from the AI castle.
       final hasAdvanced = aiCompanies.any((co) =>
           co.currentNode.id != aiCastleNode.id || co.progress > 0.0);
 
       expect(
         hasAdvanced,
         isTrue,
-        reason:
-            'AI Company must have moved toward a player/unoccupied castle within 60 s',
+        reason: 'AI Company must have moved toward a player/unoccupied castle within 30 s',
       );
     });
 
     test(
-        'TickResult contains AI deploy action when AI garrison >= 10 units',
+        'AI Company has a destination assigned after first tick',
         () {
-      // T085 — verifying that TickMatch returns a deploy action in TickResult
-      // when the AI garrison meets the threshold.
       final map = GameMapFixture.build();
       final castles = _buildCastles(map);
+      final companies = _buildStartingCompanies(map);
       final match = Match(
         map: map,
         humanPlayer: Ownership.player,
@@ -149,18 +147,20 @@ void main() {
       final result = const TickMatch().tick(
         match: match,
         castles: castles,
-        companies: [],
+        companies: companies,
       );
 
-      // After one tick, the AI should have deployed a Company.
+      // After one tick, the AI should have received a MoveAction.
       final aiCompanies = result.companies
           .where((c) => c.ownership == Ownership.ai)
           .toList();
 
+      expect(aiCompanies, isNotEmpty);
+      final hasDestination = aiCompanies.any((c) => c.destination != null);
       expect(
-        aiCompanies.length,
-        greaterThanOrEqualTo(1),
-        reason: 'TickResult.companies must include an AI Company after first tick with garrison >= 10',
+        hasDestination,
+        isTrue,
+        reason: 'AI Company must have a destination after the first tick',
       );
     });
   });

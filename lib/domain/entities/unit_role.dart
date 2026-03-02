@@ -87,4 +87,19 @@ enum UnitRole {
     required this.range,
     required this.specialAbility,
   });
+
+  /// Growth-rate multiplier relative to Peasant (base 1.0).
+  ///
+  /// - Peasant:  1.0   → 1 soldier / tick at base multiplier
+  /// - Warrior:  0.5   → 1 soldier every 2 ticks
+  /// - Archer:   0.5   → 1 soldier every 2 ticks
+  /// - Knight:   0.25  → 1 soldier every 4 ticks
+  /// - Catapult: 0.125 → 1 soldier every 8 ticks
+  double get growthRate => switch (this) {
+        UnitRole.peasant => 1.0,
+        UnitRole.warrior => 0.5,
+        UnitRole.archer => 0.5,
+        UnitRole.knight => 0.25,
+        UnitRole.catapult => 0.125,
+      };
 }
