@@ -7,8 +7,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    // Prevent SharedPreferences from hanging in tests.
+    // Mark the first-run hint as already shown so the 5 s auto-dismiss timer
+    // is never scheduled (avoids "pending timer" assertion failure).
+    SharedPreferences.setMockInitialValues({
+      'settings.firstRunHintShown': true,
+    });
+  });
+
   group('MapScreen', () {
     testWidgets('map loads with at least 2 castle node widgets visible',
         (tester) async {

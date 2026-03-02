@@ -12,7 +12,7 @@ void main() {
       Company(composition: {role: count});
 
   // Build a battle with melee front and ranged/Peasants rear
-  Battle _mixedBattle() {
+  Battle mixedBattle() {
     final attackers = [
       Company(composition: {
         UnitRole.warrior: 5,
@@ -32,7 +32,7 @@ void main() {
   group('BattleScreen', () {
     testWidgets('BattleScreen renders with melee units at front and ranged at rear',
         (tester) async {
-      final battle = _mixedBattle();
+      final battle = mixedBattle();
 
       await tester.pumpWidget(
         ProviderScope(
@@ -57,7 +57,7 @@ void main() {
     });
 
     testWidgets('BattleScreen shows HP bars', (tester) async {
-      final battle = _mixedBattle();
+      final battle = mixedBattle();
 
       await tester.pumpWidget(
         ProviderScope(
@@ -77,7 +77,7 @@ void main() {
     });
 
     testWidgets('BattleScreen shows "Next Round" button', (tester) async {
-      final battle = _mixedBattle();
+      final battle = mixedBattle();
 
       await tester.pumpWidget(
         ProviderScope(

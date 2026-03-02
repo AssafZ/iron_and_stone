@@ -11,7 +11,7 @@ void main() {
 
     group('Knight road charge (2× DMG on road)', () {
       test('Knight road 2× DMG returns 80 total for 1 Knight', () {
-        final ctx = BattleContext(isOnRoad: true, isDefendingCastle: false);
+        final ctx = const BattleContext(isOnRoad: true, isDefendingCastle: false);
 
         final bonus = TerrainBonus.applyBonus(
           role: UnitRole.knight,
@@ -24,7 +24,7 @@ void main() {
       });
 
       test('Knight NOT on road does NOT get 2× bonus', () {
-        final ctx = BattleContext(isOnRoad: false, isDefendingCastle: false);
+        final ctx = const BattleContext(isOnRoad: false, isDefendingCastle: false);
 
         final bonus = TerrainBonus.applyBonus(
           role: UnitRole.knight,
@@ -37,7 +37,7 @@ void main() {
 
       test('multiple Knights on road scale correctly (2 Knights × 80 = 160)',
           () {
-        final ctx = BattleContext(isOnRoad: true, isDefendingCastle: false);
+        final ctx = const BattleContext(isOnRoad: true, isDefendingCastle: false);
 
         final bonus = TerrainBonus.applyBonus(
           role: UnitRole.knight,
@@ -72,7 +72,7 @@ void main() {
       });
 
       test('Archers defending castle with High Ground deal 2× damage', () {
-        final ctx = BattleContext(
+        final ctx = const BattleContext(
           isOnRoad: false,
           isDefendingCastle: true,
           highGroundActive: true,
@@ -90,7 +90,7 @@ void main() {
 
       test('Archers defending castle with High Ground apply 75% DR', () {
         final incomingDamage = 100;
-        final ctx = BattleContext(
+        final ctx = const BattleContext(
           isOnRoad: false,
           isDefendingCastle: true,
           highGroundActive: true,
@@ -106,7 +106,7 @@ void main() {
       });
 
       test('High Ground negated when Warriors present — Archers get base damage only', () {
-        final ctx = BattleContext(
+        final ctx = const BattleContext(
           isOnRoad: false,
           isDefendingCastle: true,
           highGroundActive: false, // Warriors present → negated
@@ -123,7 +123,7 @@ void main() {
 
       test('High Ground negated — no DR applied', () {
         final incomingDamage = 100;
-        final ctx = BattleContext(
+        final ctx = const BattleContext(
           isOnRoad: false,
           isDefendingCastle: true,
           highGroundActive: false,

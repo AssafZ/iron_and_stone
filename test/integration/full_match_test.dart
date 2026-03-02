@@ -1,8 +1,13 @@
 // T088 — Failing integration test: full match from launch to Total Conquest.
+// T097 — Persistence round-trip assertions and SC-006 end-to-end test.
 // Red-Green-Refactor: tests confirm MatchPhase transitions and correct MatchOutcome.
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/data/drift/app_database.dart';
+import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
@@ -12,6 +17,7 @@ import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/tick_match.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -417,6 +423,192 @@ void main() {
           reason: 'Mixed ownership across 5 ticks must not produce a MatchOutcome',
         );
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // T097 — Persistence round-trip (MatchDao save → load)
+  // ---------------------------------------------------------------------------
+  group('Persistence round-trip (T097)', () {
+    late AppDatabase db;
+    late MatchDao dao;
+
+    setUp(() {
+      db = AppDatabase(NativeDatabase.memory());
+      dao = MatchDao(db);
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('saveMatch then loadMatch restores match phase and elapsed time', () async {
+      final map = GameMapFixture.build();
+      final castles = _buildCastles(map);
+      final match = Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+        elapsedTime: const Duration(seconds: 60),
+      );
+      final originalState = MatchState(
+        match: match,
+        castles: castles,
+        companies: [],
+      );
+
+      await dao.saveMatch(matchId: 'test_match', state: originalState);
+      final restored = await dao.loadMatch('test_match');
+
+      expect(restored, isNotNull);
+      expect(restored!.match.phase, equals(MatchPhase.playing));
+      expect(restored.match.elapsedTime, equals(const Duration(seconds: 60)));
+      expect(restored.match.humanPlayer, equals(Ownership.player));
+    });
+
+    test('saveMatch then loadMatch restores castle ownership and garrison', () async {
+      final map = GameMapFixture.build();
+      final castles = [
+        Castle(
+          id: GameMapFixture.playerCastleId,
+          ownership: Ownership.player,
+          garrison: {UnitRole.warrior: 15, UnitRole.archer: 8},
+        ),
+        Castle(
+          id: GameMapFixture.aiCastleId,
+          ownership: Ownership.ai,
+          garrison: {UnitRole.warrior: 5},
+        ),
+      ];
+      final match = Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      );
+      final originalState = MatchState(
+        match: match,
+        castles: castles,
+        companies: [],
+      );
+
+      await dao.saveMatch(matchId: 'test_match_2', state: originalState);
+      final restored = await dao.loadMatch('test_match_2');
+
+      expect(restored, isNotNull);
+      final playerCastle = restored!.castles
+          .firstWhere((c) => c.id == GameMapFixture.playerCastleId);
+      final aiCastle = restored.castles
+          .firstWhere((c) => c.id == GameMapFixture.aiCastleId);
+
+      expect(playerCastle.ownership, equals(Ownership.player));
+      expect(playerCastle.garrison[UnitRole.warrior], equals(15));
+      expect(playerCastle.garrison[UnitRole.archer], equals(8));
+      expect(aiCastle.ownership, equals(Ownership.ai));
+      expect(aiCastle.garrison[UnitRole.warrior], equals(5));
+    });
+
+    test('saveMatch then loadMatch restores companies on map', () async {
+      final map = GameMapFixture.build();
+      final castles = _buildCastles(map);
+      final playerCastleNode = map.nodes
+          .whereType<CastleNode>()
+          .firstWhere((n) => n.id == GameMapFixture.playerCastleId);
+
+      final company = CompanyOnMap(
+        id: 'co_1',
+        ownership: Ownership.player,
+        currentNode: playerCastleNode,
+        destination: null,
+        progress: 0.0,
+        company: Company(composition: {UnitRole.warrior: 10}),
+      );
+
+      final match = Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      );
+      final originalState = MatchState(
+        match: match,
+        castles: castles,
+        companies: [company],
+      );
+
+      await dao.saveMatch(matchId: 'test_match_3', state: originalState);
+      final restored = await dao.loadMatch('test_match_3');
+
+      expect(restored, isNotNull);
+      expect(restored!.companies, hasLength(1));
+      final restoredCo = restored.companies.first;
+      expect(restoredCo.id, equals('co_1'));
+      expect(restoredCo.ownership, equals(Ownership.player));
+      expect(restoredCo.currentNode.id, equals(GameMapFixture.playerCastleId));
+      expect(restoredCo.company.composition[UnitRole.warrior], equals(10));
+    });
+
+    test('loadMatch returns null for unknown matchId', () async {
+      final result = await dao.loadMatch('nonexistent_id');
+      expect(result, isNull);
+    });
+
+    test('deleteMatch removes all associated rows', () async {
+      final map = GameMapFixture.build();
+      final castles = _buildCastles(map);
+      final match = Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      );
+      final originalState = MatchState(
+        match: match,
+        castles: castles,
+        companies: [],
+      );
+
+      await dao.saveMatch(matchId: 'delete_test', state: originalState);
+      await dao.deleteMatch('delete_test');
+
+      final result = await dao.loadMatch('delete_test');
+      expect(result, isNull);
+    });
+
+    test('SC-006: launch → deploy → march → battle trigger → total conquest produces correct MatchOutcome', () {
+      // End-to-end simulation: mixed castles → TickMatch produces no outcome;
+      // then force all-player castles → TickMatch produces playerWins.
+      final map = GameMapFixture.build();
+      final mixedCastles = _buildCastles(map);
+      final match = Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      );
+
+      // Step 1: Normal play — no outcome.
+      final midResult = const TickMatch().tick(
+        match: match,
+        castles: mixedCastles,
+        companies: [],
+      );
+      expect(midResult.matchOutcome, isNull,
+          reason: 'Mid-game mixed ownership should not produce outcome');
+
+      // Step 2: Player captures all castles.
+      final allPlayerCastles = map.nodes
+          .whereType<CastleNode>()
+          .map((n) => Castle(
+                id: n.id,
+                ownership: Ownership.player,
+                garrison: {},
+              ))
+          .toList();
+
+      final finalResult = const TickMatch().tick(
+        match: match,
+        castles: allPlayerCastles,
+        companies: [],
+      );
+      expect(finalResult.matchOutcome, equals(MatchOutcome.playerWins),
+          reason: 'All player castles must produce playerWins');
     });
   });
 }

@@ -31,7 +31,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -55,7 +55,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -81,7 +81,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -107,7 +107,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -129,7 +129,7 @@ void main() {
       // Use road collision so high ground is not triggered (symmetric fight → draw)
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -152,7 +152,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -203,7 +203,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -272,7 +272,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],
@@ -296,7 +296,7 @@ void main() {
 
       final result = const ResolveBattle().resolve(
         battle: battle,
-        trigger: BattleTrigger(
+        trigger: const BattleTrigger(
           kind: BattleTriggerKind.roadCollision,
           location: RoadJunctionNode(id: 'j1', x: 0, y: 0),
           companyIds: ['a1', 'd1'],

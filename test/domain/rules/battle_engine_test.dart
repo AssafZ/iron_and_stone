@@ -20,7 +20,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         // Knight has 100 HP; Warrior deals 15 DMG → Knight should have 85 HP remaining
@@ -39,7 +39,7 @@ void main() {
           kind: BattleKind.castleAssault,
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.roundDamageToDefenders, equals(40));
@@ -53,7 +53,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.roundDamageToDefenders, equals(25));
@@ -67,7 +67,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.roundDamageToDefenders, equals(60));
@@ -81,7 +81,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.roundDamageToDefenders, equals(0));
@@ -96,7 +96,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.roundDamageToDefenders, equals(45));
@@ -116,7 +116,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         // 2 Catapults deal 120 DMG; 2 Warriors eliminated (100 HP), 1 remains (50 HP - 20 damage)
@@ -136,7 +136,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         // Resolve rounds until outcome
         var current = battle;
         BattleRoundResult? lastResult;
@@ -160,7 +160,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         var current = battle;
         for (var i = 0; i < 20; i++) {
           final result = engine.resolveRound(current);
@@ -183,7 +183,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         var current = battle;
         for (var i = 0; i < 20; i++) {
           final result = engine.resolveRound(current);
@@ -204,7 +204,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         expect(result.updatedBattle.roundLog, isNotEmpty);
@@ -219,7 +219,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         current = engine.resolveRound(current).updatedBattle;
         current = engine.resolveRound(current).updatedBattle;
 
@@ -238,7 +238,7 @@ void main() {
           defenders: [defenderCompany],
         );
 
-        final engine = BattleEngine();
+        final engine = const BattleEngine();
         final result = engine.resolveRound(battle);
 
         // Both sides should have taken damage

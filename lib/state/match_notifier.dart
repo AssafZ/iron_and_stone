@@ -1,3 +1,4 @@
+import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
@@ -45,11 +46,35 @@ final class MatchState {
 /// - [addCompany] / [removeCompany]: called by [CompanyNotifier] to sync list.
 ///
 /// Contains NO game-rule logic — all computation is delegated to [TickMatch].
+///
+/// Persistence: after each [tick] the full [MatchState] is saved via [MatchDao].
+/// On cold start ([build]), the notifier attempts to restore a saved match
+/// before falling back to a fresh [_buildInitialState].
 class MatchNotifier extends AsyncNotifier<MatchState> {
   static const _tickSeconds = 10.0;
 
+  /// The stable match ID used for all persistence operations.
+  static const _persistedMatchId = 'current_match';
+
+  MatchDao? _dao;
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
+
   @override
   Future<MatchState> build() async {
+    // Read DAO from provider — null in widget tests (no override), real in prod.
+    _dao = ref.read(matchDaoProvider);
+    if (_dao != null) {
+      try {
+        final saved = await _dao!.loadMatch(_persistedMatchId);
+        if (saved != null) return saved;
+      } catch (_) {
+        // If persistence fails (e.g. schema change), fall through to fresh state.
+        _dao = null;
+      }
+    }
     return _buildInitialState();
   }
 
@@ -58,8 +83,15 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
   // ---------------------------------------------------------------------------
 
   /// Initialise a new single-player match.
+  ///
+  /// Deletes any previously persisted match before starting fresh.
   Future<void> newGame() async {
     state = const AsyncLoading();
+    try {
+      await _dao?.deleteMatch(_persistedMatchId);
+    } catch (_) {
+      // Ignore persistence errors on new game.
+    }
     state = await AsyncValue.guard(() async => _buildInitialState());
   }
 
@@ -94,6 +126,16 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
         matchOutcome: result.matchOutcome,
       ),
     );
+
+    // Persist snapshot after every tick.
+    final updated = state.valueOrNull;
+    if (updated != null) {
+      try {
+        await _dao?.saveMatch(matchId: _persistedMatchId, state: updated);
+      } catch (_) {
+        // Persistence failures must not crash the game loop.
+      }
+    }
 
     return result;
   }
@@ -148,6 +190,13 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
         UnitRole.catapult: 2,
       };
 }
+
+/// Provides the [MatchDao] used for game-state persistence.
+///
+/// Defaults to `null` (no persistence). Widget tests use the default so no
+/// real SQLite database is opened. Production code overrides this in
+/// [ProviderScope] with a real [MatchDao] instance.
+final matchDaoProvider = Provider<MatchDao?>((ref) => null);
 
 /// The global [MatchNotifier] provider.
 final matchNotifierProvider =

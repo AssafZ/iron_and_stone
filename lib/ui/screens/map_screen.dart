@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:iron_and_stone/data/settings_repository.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
@@ -7,11 +10,11 @@ import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
-import 'package:iron_and_stone/ui/screens/castle_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
 import 'package:iron_and_stone/ui/widgets/split_slider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The main gameplay screen — renders the map, castle nodes, and Company markers.
 ///
@@ -34,6 +37,38 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
+  bool _showHint = false;
+  Timer? _hintTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstRunHint();
+  }
+
+  @override
+  void dispose() {
+    _hintTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkFirstRunHint() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final repo = SettingsRepository(prefs);
+      if (!repo.firstRunHintShown) {
+        if (mounted) setState(() => _showHint = true);
+        await repo.markFirstRunHintShown();
+        // Auto-dismiss after 5 seconds; store timer so it can be cancelled on dispose.
+        _hintTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted) setState(() => _showHint = false);
+        });
+      }
+    } catch (_) {
+      // If preferences fail, just don't show the hint.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final matchAsync = ref.watch(matchNotifierProvider);
@@ -46,18 +81,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         foregroundColor: AppTheme.parchment,
       ),
       backgroundColor: AppTheme.parchment,
-      body: matchAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (matchState) => companyAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (companyState) => _buildMap(
-            context,
-            matchState,
-            companyState,
+      body: Stack(
+        children: [
+          matchAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (matchState) => companyAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (companyState) => _buildMap(
+                context,
+                matchState,
+                companyState,
+              ),
+            ),
           ),
-        ),
+          if (_showHint) _FirstRunHintOverlay(onDismiss: () => setState(() => _showHint = false)),
+        ],
       ),
     );
   }
@@ -266,13 +306,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    // No selection: if tapping player castle, navigate to CastleScreen.
+    // No selection: if tapping player castle, show deploy bottom sheet.
     if (node is CastleNode && node.ownership == Ownership.player) {
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => CastleScreen(castleId: node.id),
-        ),
-      );
+      showDeploySheet(context, ref, matchState, node);
     }
   }
 
@@ -290,6 +326,72 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   static String _nodeKey(MapNode node) {
     if (node is CastleNode) return 'castle_node_${node.id}';
     return 'junction_node_${node.id}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// First-run hint overlay (T103)
+// ---------------------------------------------------------------------------
+
+/// Contextual overlay shown on first launch to guide new players.
+///
+/// Displayed once only; persisted via [SettingsRepository.firstRunHintShown].
+/// Auto-dismisses after 5 seconds or immediately on tap.
+class _FirstRunHintOverlay extends StatelessWidget {
+  final VoidCallback onDismiss;
+
+  const _FirstRunHintOverlay({required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: onDismiss,
+        child: Container(
+          color: Colors.black.withAlpha(140),
+          child: Center(
+            child: Container(
+              key: const ValueKey('first_run_hint_overlay'),
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              decoration: BoxDecoration(
+                color: AppTheme.parchment,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.ironDark, width: 2),
+              ),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.castle, size: 40, color: AppTheme.ironDark),
+                  SizedBox(height: 12),
+                  Text(
+                    'Tap a castle to deploy\nyour first Company',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.ironDark,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Then tap a road node to march.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: AppTheme.stone),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    '(Tap anywhere to dismiss)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: AppTheme.stone),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -31,9 +31,9 @@ void main() {
 
     testWidgets('VictoryScreen has a dismiss button', (tester) async {
       await tester.pumpWidget(
-        ProviderScope(
+        const ProviderScope(
           child: MaterialApp(
-            home: VictoryScreen(rounds: 3, attackerSurvivors: const []),
+            home: VictoryScreen(rounds: 3, attackerSurvivors: []),
           ),
         ),
       );
@@ -49,7 +49,7 @@ void main() {
             routes: {
               '/map': (_) => const Scaffold(body: Text('Map Screen')),
             },
-            home: VictoryScreen(rounds: 3, attackerSurvivors: const []),
+            home: const VictoryScreen(rounds: 3, attackerSurvivors: []),
           ),
         ),
       );
@@ -82,9 +82,9 @@ void main() {
 
     testWidgets('DefeatScreen has a dismiss button', (tester) async {
       await tester.pumpWidget(
-        ProviderScope(
+        const ProviderScope(
           child: MaterialApp(
-            home: DefeatScreen(rounds: 2, defenderSurvivors: const []),
+            home: DefeatScreen(rounds: 2, defenderSurvivors: []),
           ),
         ),
       );
@@ -96,9 +96,9 @@ void main() {
         (tester) async {
       // Victory
       await tester.pumpWidget(
-        ProviderScope(
+        const ProviderScope(
           child: MaterialApp(
-            home: VictoryScreen(rounds: 1, attackerSurvivors: const []),
+            home: VictoryScreen(rounds: 1, attackerSurvivors: []),
           ),
         ),
       );
@@ -106,9 +106,9 @@ void main() {
 
       // Defeat
       await tester.pumpWidget(
-        ProviderScope(
+        const ProviderScope(
           child: MaterialApp(
-            home: DefeatScreen(rounds: 1, defenderSurvivors: const []),
+            home: DefeatScreen(rounds: 1, defenderSurvivors: []),
           ),
         ),
       );
@@ -117,9 +117,9 @@ void main() {
 
     testWidgets('DefeatScreen dismiss button is tappable', (tester) async {
       await tester.pumpWidget(
-        ProviderScope(
+        const ProviderScope(
           child: MaterialApp(
-            home: DefeatScreen(rounds: 2, defenderSurvivors: const []),
+            home: DefeatScreen(rounds: 2, defenderSurvivors: []),
           ),
         ),
       );

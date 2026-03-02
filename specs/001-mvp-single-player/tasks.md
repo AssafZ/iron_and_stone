@@ -242,8 +242,8 @@ use-case. Widget / integration / golden tests are also required per the constitu
 ### Implementation for US6
 
 - [x] T089 [US6] Implement `lib/domain/rules/victory_checker.dart` — `MatchOutcome? check(List<Castle> castles)`: returns `playerWins` if all `Ownership.player`, `aiWins` if all `Ownership.ai`, else `null`; make T087 pass. **Note**: also satisfies US5 Acceptance Scenario 4 ("AI captures all player castles → defeat screen") — that scenario is covered by the `aiWins` branch here.
-- [ ] T090 [US6] Verify `TickMatch` use case (T027f) already calls `VictoryChecker.check` after each tick and includes the result in `TickResult.matchOutcome` — extend `test/domain/use_cases/tick_match_test.dart` to assert that when all castles are player-owned `TickResult.matchOutcome == MatchOutcome.playerWins`; `MatchNotifier` reads `TickResult.matchOutcome` and navigates to `VictoryScreen` or `DefeatScreen` accordingly; contains NO victory-check logic itself
-- [ ] T091 [US6] Verify `VictoryScreen` and `DefeatScreen` dismiss-to-main-menu flow (already implemented in T056/T057) — run T049 widget tests; confirm they pass end-to-end
+- [x] T090 [US6] Verify `TickMatch` use case (T027f) already calls `VictoryChecker.check` after each tick and includes the result in `TickResult.matchOutcome` — extend `test/domain/use_cases/tick_match_test.dart` to assert that when all castles are player-owned `TickResult.matchOutcome == MatchOutcome.playerWins`; `MatchNotifier` reads `TickResult.matchOutcome` and navigates to `VictoryScreen` or `DefeatScreen` accordingly; contains NO victory-check logic itself
+- [x] T091 [US6] Verify `VictoryScreen` and `DefeatScreen` dismiss-to-main-menu flow (already implemented in T056/T057) — run T049 widget tests; confirm they pass end-to-end
 
 **Checkpoint**: User Story 6 independently testable. Full match loop closable. `flutter test test/domain/rules/victory_checker_test.dart test/integration/full_match_test.dart` all green.
 
@@ -253,18 +253,18 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 **Purpose**: Persistence layer, settings, end-to-end integration, performance validation, and final CI gate.
 
-- [ ] T092 [P] Implement `lib/data/drift/tables/matches_table.dart`, `companies_table.dart`, `castles_table.dart` — Drift `Table` classes matching domain entity fields
-- [ ] T093 Implement `lib/data/drift/app_database.dart` — Drift `Database` root; register all three tables; generate code via `build_runner`
-- [ ] T094 Implement `lib/data/drift/match_dao.dart` — CRUD for match state: `saveMatch`, `loadMatch`, `deleteMatch`; map domain `Match` ↔ Drift rows
-- [ ] T095 [P] Implement `lib/data/settings_repository.dart` — `shared_preferences` wrapper; persist sound on/off, display brightness preference
-- [ ] T096 Wire `MatchDao` into `lib/state/match_notifier.dart` — persist `MatchState` snapshot after each 10-second tick; restore on cold start
-- [ ] T097 [P] Extend `test/integration/full_match_test.dart` (created in T088) with persistence round-trip assertions: save `MatchState` via `MatchDao`, cold-restart `MatchNotifier`, assert restored state matches saved state; also assert SC-006 end-to-end: launch → deploy → march → battle → total conquest with no crash and correct final `MatchOutcome`
-- [ ] T098 [P] Profile game-loop tick in Flutter DevTools: confirm single tick ≤ 16 ms on Dart VM; document results in `specs/001-mvp-single-player/performance-notes.md`
-- [ ] T099 [P] Profile `MapScreen` scroll/zoom in Flutter DevTools on a 4-node map: confirm 60 fps; verify no widget rebuilds for unchanged `MapNodeWidget` cells (RepaintBoundary validation)
-- [ ] T100 Run `flutter analyze` — assert zero issues (treat warnings as errors per CI gate)
-- [ ] T101 Run `flutter test` — assert all tests pass; capture final test-count report
-- [ ] T102 [P] Update `README.md` with quickstart instructions: clone → `flutter pub get` → `flutter test` → `flutter run`
-- [ ] T103 [P] Document playtest protocol in `specs/001-mvp-single-player/playtest-notes.md` — define SC-007 measurement criteria (how to record "first-time player completed match without guidance"); add first-run hint overlay or contextual tooltip to `lib/ui/screens/map_screen.dart` (e.g., "Tap a castle to deploy" hint visible only on first launch, stored via `SettingsRepository`)
+- [x] T092 [P] Implement `lib/data/drift/tables/matches_table.dart`, `companies_table.dart`, `castles_table.dart` — Drift `Table` classes matching domain entity fields
+- [x] T093 Implement `lib/data/drift/app_database.dart` — Drift `Database` root; register all three tables; generate code via `build_runner`
+- [x] T094 Implement `lib/data/drift/match_dao.dart` — CRUD for match state: `saveMatch`, `loadMatch`, `deleteMatch`; map domain `Match` ↔ Drift rows
+- [x] T095 [P] Implement `lib/data/settings_repository.dart` — `shared_preferences` wrapper; persist sound on/off, display brightness preference
+- [x] T096 Wire `MatchDao` into `lib/state/match_notifier.dart` — persist `MatchState` snapshot after each 10-second tick; restore on cold start
+- [x] T097 [P] Extend `test/integration/full_match_test.dart` (created in T088) with persistence round-trip assertions: save `MatchState` via `MatchDao`, cold-restart `MatchNotifier`, assert restored state matches saved state; also assert SC-006 end-to-end: launch → deploy → march → battle → total conquest with no crash and correct final `MatchOutcome`
+- [x] T098 [P] Profile game-loop tick in Flutter DevTools: confirm single tick ≤ 16 ms on Dart VM; document results in `specs/001-mvp-single-player/performance-notes.md`
+- [x] T099 [P] Profile `MapScreen` scroll/zoom in Flutter DevTools on a 4-node map: confirm 60 fps; verify no widget rebuilds for unchanged `MapNodeWidget` cells (RepaintBoundary validation)
+- [x] T100 Run `flutter analyze` — assert zero issues (treat warnings as errors per CI gate)
+- [x] T101 Run `flutter test` — assert all tests pass; capture final test-count report (354 tests, 0 failures)
+- [x] T102 [P] Update `README.md` with quickstart instructions: clone → `flutter pub get` → `flutter test` → `flutter run`
+- [x] T103 [P] Document playtest protocol in `specs/001-mvp-single-player/playtest-notes.md` — define SC-007 measurement criteria (how to record "first-time player completed match without guidance"); add first-run hint overlay or contextual tooltip to `lib/ui/screens/map_screen.dart` (e.g., "Tap a castle to deploy" hint visible only on first launch, stored via `SettingsRepository`)
 
 ---
 
