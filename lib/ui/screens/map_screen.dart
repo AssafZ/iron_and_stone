@@ -42,6 +42,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _showHint = false;
   Timer? _hintTimer;
   Timer? _gameLoopTimer;
+  final TransformationController _transformController = TransformationController();
 
   static const Duration _tickInterval = Duration(seconds: 10);
 
@@ -50,6 +51,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.initState();
     _checkFirstRunHint();
     _startGameLoop();
+    // Fit the entire map canvas into the viewport on first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fitMapToScreen());
+  }
+
+  /// Compute and apply an initial transformation that shows the whole map.
+  void _fitMapToScreen() {
+    if (!mounted) return;
+    final size = context.size;
+    if (size == null) return;
+    // Account for AppBar height so we fit within the body area.
+    final availableHeight = size.height - kToolbarHeight - MediaQuery.of(context).padding.top;
+    final availableWidth = size.width;
+    // Scale so the canvas fits with a small padding on all sides.
+    const padding = 20.0;
+    final scaleX = (availableWidth - padding * 2) / MapScreen._canvasWidth;
+    final scaleY = (availableHeight - padding * 2) / MapScreen._canvasHeight;
+    final scale = scaleX < scaleY ? scaleX : scaleY;
+    // Translate so the scaled canvas is centred in the viewport.
+    final dx = (availableWidth - MapScreen._canvasWidth * scale) / 2;
+    final dy = (availableHeight - MapScreen._canvasHeight * scale) / 2;
+    _transformController.value = Matrix4.identity()
+      ..scale(scale)
+      ..translate(dx / scale, dy / scale);
   }
 
   void _startGameLoop() {
@@ -64,6 +88,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void dispose() {
     _hintTimer?.cancel();
     _gameLoopTimer?.cancel();
+    _transformController.dispose();
     super.dispose();
   }
 
@@ -137,7 +162,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // Compute reachable nodes when a company is selected (for visual highlight).
     Set<String> reachableNodeIds = {};
     if (selectedId != null) {
-      final selectedCo = companyState.companies
+      // Use matchState.companies (authoritative) so this works even after ticks
+      // have advanced companies without updating the local CompanyNotifier list.
+      final selectedCo = matchState.companies
           .where((c) => c.id == selectedId)
           .firstOrNull;
       if (selectedCo != null) {
@@ -185,9 +212,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
         Expanded(
           child: InteractiveViewer(
+            transformationController: _transformController,
             boundaryMargin: const EdgeInsets.all(80),
-            minScale: 0.5,
+            minScale: 0.3,
             maxScale: 3.0,
+            constrained: false,
             child: SizedBox(
               width: MapScreen._canvasWidth,
               height: MapScreen._canvasHeight,
