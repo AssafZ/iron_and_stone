@@ -7,6 +7,7 @@ import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
+import 'package:iron_and_stone/ui/screens/castle_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
@@ -164,9 +165,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    // No selection: if tapping player castle, open deploy bottom sheet.
+    // No selection: if tapping player castle, navigate to CastleScreen.
     if (node is CastleNode && node.ownership == Ownership.player) {
-      showDeploySheet(context, ref, matchState, node);
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => CastleScreen(castleId: node.id),
+        ),
+      );
     }
   }
 

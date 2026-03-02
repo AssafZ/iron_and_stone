@@ -1,7 +1,7 @@
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
-import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/use_cases/tick_castle_growth.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 
 /// The outcome of a completed match.
@@ -33,7 +33,7 @@ final class TickResult {
 /// Per-tick orchestrator (pure Dart, zero Flutter/state imports).
 ///
 /// Execution order per tick:
-/// 1. Apply [_tickCastleGrowth] to all castles.
+/// 1. Apply [TickCastleGrowth] to all castles.
 /// 2. Advance all [CompanyOnMap] positions via [_advanceCompanies].
 /// 3. Run [CheckCollisions] to detect [BattleTrigger]s.
 /// 4. Run [_checkVictory] to detect [MatchOutcome].
@@ -43,9 +43,6 @@ final class TickResult {
 final class TickMatch {
   static const double _tickSeconds = 10.0;
 
-  // Growth rate: 1 unit per role per tick at base multiplier.
-  static const int _baseGrowthPerTick = 1;
-
   const TickMatch();
 
   /// Execute one game tick and return the resulting [TickResult].
@@ -54,8 +51,9 @@ final class TickMatch {
     required List<Castle> castles,
     required List<CompanyOnMap> companies,
   }) {
-    // 1. Castle growth
-    final updatedCastles = castles.map(_tickCastleGrowth).toList();
+    // 1. Castle growth — delegated to TickCastleGrowth use case.
+    final updatedCastles =
+        castles.map(const TickCastleGrowth().tick).toList();
 
     // 2. Advance company positions
     final updatedCompanies = _advanceCompanies(companies, match);
@@ -80,27 +78,6 @@ final class TickMatch {
   // ---------------------------------------------------------------------------
   // Castle growth
   // ---------------------------------------------------------------------------
-
-  Castle _tickCastleGrowth(Castle castle) {
-    if (_totalGarrison(castle) >= castle.effectiveCap) {
-      return castle; // at cap — no growth
-    }
-
-    final multiplier = castle.growthRateMultiplier;
-    final updated = Map<UnitRole, int>.from(castle.garrison);
-
-    for (final role in UnitRole.values) {
-      final current = updated[role] ?? 0;
-      if (current >= 50) continue; // per-role slot cap
-      final growth = (_baseGrowthPerTick * multiplier).floor();
-      updated[role] = current + (growth < 1 ? 1 : growth);
-    }
-
-    return castle.copyWith(garrison: updated);
-  }
-
-  static int _totalGarrison(Castle castle) =>
-      castle.garrison.values.fold(0, (sum, v) => sum + v);
 
   // ---------------------------------------------------------------------------
   // Company movement

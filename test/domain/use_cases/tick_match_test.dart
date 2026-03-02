@@ -220,5 +220,93 @@ void main() {
         expect(result.matchOutcome, equals(MatchOutcome.playerWins));
       });
     });
+
+    // -------------------------------------------------------------------------
+    // T067 — TickMatch delegates to TickCastleGrowth
+    // -------------------------------------------------------------------------
+
+    group('TickCastleGrowth integration (T067)', () {
+      test('castle garrison increases after one tick when below cap', () {
+        final map = _makeMinimalMap();
+        final castleNode =
+            map.nodes.whereType<CastleNode>().first;
+        final castle = Castle(
+          id: castleNode.id,
+          ownership: castleNode.ownership,
+          garrison: {UnitRole.warrior: 0},
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: [castle],
+          companies: [],
+        );
+
+        final updated = result.castles.firstWhere((c) => c.id == castle.id);
+        // Growth engine should have added at least 1 warrior.
+        expect(updated.garrison[UnitRole.warrior] ?? 0, greaterThan(0));
+      });
+
+      test('TickCastleGrowth halt respected: garrison at cap produces no change', () {
+        final map = _makeMinimalMap();
+        final castleNode = map.nodes.whereType<CastleNode>().first;
+        // Fill to 250 (base cap).
+        final garrison = {
+          for (final role in UnitRole.values) role: 50,
+        };
+        final castle = Castle(
+          id: castleNode.id,
+          ownership: castleNode.ownership,
+          garrison: garrison,
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: [castle],
+          companies: [],
+        );
+
+        final updated = result.castles.firstWhere((c) => c.id == castle.id);
+        final totalAfter = updated.garrison.values.fold(0, (s, v) => s + v);
+        expect(totalAfter, equals(250));
+      });
+
+      test('all castles are grown each tick', () {
+        final map = GameMapFixture.build();
+        final castles = map.nodes.whereType<CastleNode>().map((n) {
+          return Castle(
+            id: n.id,
+            ownership: n.ownership,
+            garrison: {UnitRole.warrior: 0},
+          );
+        }).toList();
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: castles,
+          companies: [],
+        );
+
+        expect(result.castles.length, equals(castles.length));
+        for (final updated in result.castles) {
+          expect(updated.garrison[UnitRole.warrior] ?? 0, greaterThan(0));
+        }
+      });
+    });
   });
 }

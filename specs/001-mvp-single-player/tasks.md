@@ -161,19 +161,19 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 ### Tests for US3 *(Red-Green-Refactor — write first, confirm FAILING)*
 
-- [ ] T061 [P] [US3] Write failing unit tests for `GrowthEngine` in `test/domain/rules/growth_engine_test.dart`: each role grows independently per tick — a role-slot at 50 halts only that role's growth while other roles in the same garrison continue; base tick adds 1 unit per role every 10 s; Peasant multiplier stacks (+5% per Peasant, FR-006); total Castle Cap (250 × multiplier) halts all growth when reached; growth resumes after units are deployed
-- [ ] T062 [P] [US3] Write failing unit tests for `TickCastleGrowth` use case in `test/domain/use_cases/tick_castle_growth_test.dart`: single tick produces correct counts; cap enforcement at Company and castle levels; Peasant bonus computed before cap check
-- [ ] T063 [P] [US3] Extend `test/domain/use_cases/deploy_company_test.dart` (created in T029) with edge-case tests: exceeding 50 blocked with error (FR-008); deploying exactly 50 accepted; deploying 0 of a role is ignored, not blocked; garrison flat-pool correctly decremented by exact role amounts
-- [ ] T064 [P] [US3] Write failing widget test for `CastleScreen` in `test/widget/castle_screen_test.dart`: displays live garrison counts; `DeploymentPanel` rejects total > 50; deploying valid composition updates CompanyNotifier; Peasant bonus and cap values displayed correctly
+- [x] T061 [P] [US3] Write failing unit tests for `GrowthEngine` in `test/domain/rules/growth_engine_test.dart`: each role grows independently per tick — a role-slot at 50 halts only that role's growth while other roles in the same garrison continue; base tick adds 1 unit per role every 10 s; Peasant multiplier stacks (+5% per Peasant, FR-006); total Castle Cap (250 × multiplier) halts all growth when reached; growth resumes after units are deployed
+- [x] T062 [P] [US3] Write failing unit tests for `TickCastleGrowth` use case in `test/domain/use_cases/tick_castle_growth_test.dart`: single tick produces correct counts; cap enforcement at Company and castle levels; Peasant bonus computed before cap check
+- [x] T063 [P] [US3] Extend `test/domain/use_cases/deploy_company_test.dart` (created in T029) with edge-case tests: exceeding 50 blocked with error (FR-008); deploying exactly 50 accepted; deploying 0 of a role is ignored, not blocked; garrison flat-pool correctly decremented by exact role amounts
+- [x] T064 [P] [US3] Write failing widget test for `CastleScreen` in `test/widget/castle_screen_test.dart`: displays live garrison counts; `DeploymentPanel` rejects total > 50; deploying valid composition updates CompanyNotifier; Peasant bonus and cap values displayed correctly
 
 ### Implementation for US3
 
-- [ ] T065 [US3] Implement `lib/domain/rules/growth_engine.dart` — `CastleGrowthResult tick(Castle castle)`: compute effective rate (1 × multiplier per role); apply per-Company 50 cap; apply Castle Cap; return updated `Castle`; make T061 pass
-- [ ] T066 [US3] Implement `lib/domain/use_cases/tick_castle_growth.dart` — wrap `GrowthEngine.tick`; accepts `Castle`, returns `Castle`; make T062 pass
-- [ ] T067 [US3] Verify `TickMatch` use case (T027f) already calls `TickCastleGrowth` for all castles on each tick — write integration-level test in `test/domain/use_cases/tick_match_test.dart` (extend T027d file) asserting castle garrison counts increase after one tick when below cap
-- [ ] T068 [US3] Update `lib/state/castle_notifier.dart` — add `tickGrowth()` action wired to `TickCastleGrowth`; expose `effectiveCap` and `growthRateMultiplier` to UI
-- [ ] T069 [P] [US3] Implement `lib/ui/widgets/deployment_panel.dart` — per-role integer steppers (± buttons); running total badge; "Deploy" button disabled when total > 50 or garrison insufficient; dispatches `deployCompany(...)` on confirm; make T064 pass
-- [ ] T070 [US3] Implement `lib/ui/screens/castle_screen.dart` — `ConsumerWidget`; watches `CastleNotifier` for live garrison; shows Castle Cap, growth rate, Peasant bonus; embeds `DeploymentPanel`; make T064 pass
+- [x] T065 [US3] Implement `lib/domain/rules/growth_engine.dart` — `CastleGrowthResult tick(Castle castle)`: compute effective rate (1 × multiplier per role); apply per-Company 50 cap; apply Castle Cap; return updated `Castle`; make T061 pass
+- [x] T066 [US3] Implement `lib/domain/use_cases/tick_castle_growth.dart` — wrap `GrowthEngine.tick`; accepts `Castle`, returns `Castle`; make T062 pass
+- [x] T067 [US3] Verify `TickMatch` use case (T027f) already calls `TickCastleGrowth` for all castles on each tick — write integration-level test in `test/domain/use_cases/tick_match_test.dart` (extend T027d file) asserting castle garrison counts increase after one tick when below cap
+- [x] T068 [US3] Update `lib/state/castle_notifier.dart` — add `tickGrowth()` action wired to `TickCastleGrowth`; expose `effectiveCap` and `growthRateMultiplier` to UI
+- [x] T069 [P] [US3] Implement `lib/ui/widgets/deployment_panel.dart` — per-role integer steppers (± buttons); running total badge; "Deploy" button disabled when total > 50 or garrison insufficient; dispatches `deployCompany(...)` on confirm; make T064 pass
+- [x] T070 [US3] Implement `lib/ui/screens/castle_screen.dart` — `ConsumerWidget`; watches `CastleNotifier` for live garrison; shows Castle Cap, growth rate, Peasant bonus; embeds `DeploymentPanel`; make T064 pass
 
 **Checkpoint**: User Story 3 independently testable. `flutter test test/domain/rules/growth_engine_test.dart test/widget/castle_screen_test.dart` all green.
 
