@@ -213,16 +213,16 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 ### Tests for US5 *(Red-Green-Refactor — write first, confirm FAILING)*
 
-- [ ] T081 [P] [US5] Write failing unit tests for `AiController` in `test/domain/rules/ai_controller_test.dart` (pure Dart — this is a domain rules class, not a state class): `decide(MatchState)` returns a `deploy` action with valid composition when garrison ≥ 10 units and within 30 s game-time; `decide(MatchState)` returns a `move` action targeting the nearest non-AI castle; returns `noAction` when garrison is empty
-- [ ] T082 [P] [US5] Write failing integration test in `test/integration/ai_opponent_test.dart`: start match with `MatchNotifier` in test harness; advance clock 30 s via `TickMatch`; assert AI has ≥ 1 Company on map; advance to 60 s; assert Company has moved toward a player castle
-- [ ] T083 [P] [US5] Write failing widget test verifying `MapScreen` shows AI Company markers after 30-second tick without player interaction
+- [x] T081 [P] [US5] Write failing unit tests for `AiController` in `test/domain/rules/ai_controller_test.dart` (pure Dart — this is a domain rules class, not a state class): `decide(MatchState)` returns a `deploy` action with valid composition when garrison ≥ 10 units and within 30 s game-time; `decide(MatchState)` returns a `move` action targeting the nearest non-AI castle; returns `noAction` when garrison is empty
+- [x] T082 [P] [US5] Write failing integration test in `test/integration/ai_opponent_test.dart`: start match with `MatchNotifier` in test harness; advance clock 30 s via `TickMatch`; assert AI has ≥ 1 Company on map; advance to 60 s; assert Company has moved toward a player castle
+- [x] T083 [P] [US5] Write failing widget test verifying `MapScreen` shows AI Company markers after 30-second tick without player interaction
 
 ### Implementation for US5
 
-- [ ] T084 [US5] Implement `lib/domain/rules/ai_controller.dart` — pure Dart class `AiController`; `AiAction decide(MatchState state)` returns one of: `DeployAction` (when garrison ≥ 10 units), `MoveAction` (march nearest Company toward nearest non-AI castle), `NoAction` (garrison empty or all Companies already moving); zero Flutter/state imports; make T081 pass
-- [ ] T084a [US5] Implement `lib/state/ai_controller_notifier.dart` — thin Riverpod `Notifier` wrapper; calls `AiController.decide(matchState)` and dispatches resulting `AiAction` to `CompanyNotifier` or `CastleNotifier`; contains NO decision logic
-- [ ] T085 [US5] Verify `TickMatch` use case (T027f) already calls `AiController.decide` after growth and movement steps — extend `test/domain/use_cases/tick_match_test.dart` to assert that when AI garrison ≥ 10 units, `TickResult` contains a deploy action for the AI; make T082 pass
-- [ ] T086 [US5] Verify `MapScreen` reflects AI Company markers by running T083 widget test — fix any watch/rebuild issues in `lib/ui/screens/map_screen.dart`
+- [x] T084 [US5] Implement `lib/domain/rules/ai_controller.dart` — pure Dart class `AiController`; `AiAction decide(MatchState state)` returns one of: `DeployAction` (when garrison ≥ 10 units), `MoveAction` (march nearest Company toward nearest non-AI castle), `NoAction` (garrison empty or all Companies already moving); zero Flutter/state imports; make T081 pass
+- [x] T084a [US5] Implement `lib/state/ai_controller_notifier.dart` — thin Riverpod `Notifier` wrapper; calls `AiController.decide(matchState)` and dispatches resulting `AiAction` to `CompanyNotifier` or `CastleNotifier`; contains NO decision logic
+- [x] T085 [US5] Verify `TickMatch` use case (T027f) already calls `AiController.decide` after growth and movement steps — extend `test/domain/use_cases/tick_match_test.dart` to assert that when AI garrison ≥ 10 units, `TickResult` contains a deploy action for the AI; make T082 pass
+- [x] T086 [US5] Verify `MapScreen` reflects AI Company markers by running T083 widget test — fix any watch/rebuild issues in `lib/ui/screens/map_screen.dart`
 
 **Checkpoint**: User Story 5 independently testable. Start match, wait 30 s, AI acts. `flutter test test/domain/rules/ai_controller_test.dart test/integration/ai_opponent_test.dart` green.
 

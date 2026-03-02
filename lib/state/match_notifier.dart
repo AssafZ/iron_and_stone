@@ -66,10 +66,13 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
   /// Apply one game-loop tick.
   ///
   /// Delegates entirely to [TickMatch]; stores results back into state.
+  /// Also syncs [CompanyNotifier] so AI-deployed companies appear on MapScreen.
   Future<TickResult?> tick() async {
     final current = state.valueOrNull;
     if (current == null) return null;
 
+    // TickMatch now includes AiController decision + application internally,
+    // so result.companies may include newly AI-deployed companies.
     final result = const TickMatch().tick(
       match: current.match,
       castles: current.castles,

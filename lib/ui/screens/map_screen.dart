@@ -68,7 +68,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     CompanyListState companyState,
   ) {
     final nodes = matchState.match.map.nodes;
-    final companies = companyState.companies;
+    // matchState.companies is the authoritative company list — it is kept in
+    // sync by CompanyNotifier (player actions call updateCompanies) and by
+    // TickMatch (AI-deployed companies appear here after each tick).
+    final companies = matchState.companies;
     final selectedId = companyState.selectedCompanyId;
 
     return InteractiveViewer(

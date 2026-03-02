@@ -4,7 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
+import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 
 void main() {
   group('MapScreen', () {
@@ -149,6 +151,50 @@ void main() {
       // and the widget rebuilds correctly when ownership changes.
       // (Full colour verification is covered by golden tests in T059/T060.)
       expect(aiCastleWidget, findsOneWidget);
+    });
+
+    // T083 — AI Company markers appear on MapScreen after 30-second tick
+    testWidgets(
+        'AI Company markers appear on MapScreen after match tick without player interaction',
+        (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(home: MapScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify map is loaded (both castle nodes present).
+      expect(find.byKey(const ValueKey('castle_node_player_castle')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('castle_node_ai_castle')),
+          findsOneWidget);
+
+      // Trigger a match tick via the notifier.
+      // The MatchNotifier.tick() call should cause the AI to deploy and
+      // the CompanyNotifier to be updated with AI companies.
+      // We use ProviderScope overrides to access the notifier.
+      final element = tester.element(find.byType(MapScreen));
+      final container = ProviderScope.containerOf(element);
+
+      // Trigger multiple ticks to allow AI to act (≥ 3 ticks = 30 s).
+      for (var i = 0; i < 3; i++) {
+        await container.read(matchNotifierProvider.notifier).tick();
+        await tester.pumpAndSettle();
+      }
+
+      // At least one CompanyMarker widget should now be visible.
+      // The MatchNotifier tick applies AI actions via TickMatch which deploys
+      // an AI Company, causing CompanyNotifier to update and MapScreen to render
+      // a CompanyMarker for the AI.
+      expect(
+        find.descendant(
+          of: find.byType(MapScreen),
+          matching: find.byType(CompanyMarker),
+        ),
+        findsAtLeastNWidgets(1),
+        reason: 'At least one AI Company marker should be visible after 3 ticks',
+      );
     });
   });
 }

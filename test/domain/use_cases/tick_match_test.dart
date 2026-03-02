@@ -308,5 +308,145 @@ void main() {
         }
       });
     });
+
+    // -------------------------------------------------------------------------
+    // T085 — AiController integration
+    // -------------------------------------------------------------------------
+
+    group('AiController integration (T085)', () {
+      test(
+          'TickResult.companies contains an AI Company after first tick when AI garrison >= 10',
+          () {
+        final map = GameMapFixture.build();
+        final aiCastleNode =
+            map.nodes.whereType<CastleNode>().firstWhere(
+              (n) => n.ownership == Ownership.ai,
+            );
+        final aiCastle = Castle(
+          id: aiCastleNode.id,
+          ownership: Ownership.ai,
+          garrison: {UnitRole.warrior: 20, UnitRole.archer: 10},
+        );
+        final playerCastle = Castle(
+          id: GameMapFixture.playerCastleId,
+          ownership: Ownership.player,
+          garrison: {},
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: [playerCastle, aiCastle],
+          companies: [],
+        );
+
+        final aiCompanies = result.companies
+            .where((c) => c.ownership == Ownership.ai)
+            .toList();
+
+        expect(
+          aiCompanies.length,
+          greaterThanOrEqualTo(1),
+          reason:
+              'TickResult must include an AI Company after tick with garrison >= 10',
+        );
+      });
+
+      test(
+          'AI Company is not deployed when garrison < 10 units',
+          () {
+        final map = GameMapFixture.build();
+        final aiCastleNode =
+            map.nodes.whereType<CastleNode>().firstWhere(
+              (n) => n.ownership == Ownership.ai,
+            );
+        final aiCastle = Castle(
+          id: aiCastleNode.id,
+          ownership: Ownership.ai,
+          garrison: {UnitRole.warrior: 3}, // below threshold
+        );
+        final playerCastle = Castle(
+          id: GameMapFixture.playerCastleId,
+          ownership: Ownership.player,
+          garrison: {},
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        final result = const TickMatch().tick(
+          match: match,
+          castles: [playerCastle, aiCastle],
+          companies: [],
+        );
+
+        final aiCompanies = result.companies
+            .where((c) => c.ownership == Ownership.ai)
+            .toList();
+
+        expect(
+          aiCompanies,
+          isEmpty,
+          reason: 'AI should not deploy when garrison < 10 units',
+        );
+      });
+
+      test('AI Company receives destination (MoveAction) after deploy tick',
+          () {
+        final map = GameMapFixture.build();
+        final aiCastleNode =
+            map.nodes.whereType<CastleNode>().firstWhere(
+              (n) => n.ownership == Ownership.ai,
+            );
+        final aiCastle = Castle(
+          id: aiCastleNode.id,
+          ownership: Ownership.ai,
+          garrison: {UnitRole.warrior: 20},
+        );
+        final playerCastle = Castle(
+          id: GameMapFixture.playerCastleId,
+          ownership: Ownership.player,
+          garrison: {},
+        );
+        final match = Match(
+          map: map,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+        // Tick 1: deploy
+        final tick1 = const TickMatch().tick(
+          match: match,
+          castles: [playerCastle, aiCastle],
+          companies: [],
+        );
+
+        // Tick 2: move (company is stationary, should get a destination)
+        final tick2 = const TickMatch().tick(
+          match: match,
+          castles: tick1.castles,
+          companies: tick1.companies,
+        );
+
+        final aiCompanies = tick2.companies
+            .where((c) => c.ownership == Ownership.ai)
+            .toList();
+
+        expect(aiCompanies, isNotEmpty);
+        // After second tick, the AI company should have a destination assigned.
+        final hasDestination = aiCompanies.any((c) => c.destination != null);
+        expect(
+          hasDestination,
+          isTrue,
+          reason: 'AI Company must receive a destination on the tick after deploy',
+        );
+      });
+    });
   });
 }
