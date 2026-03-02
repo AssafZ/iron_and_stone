@@ -21,13 +21,13 @@ use-case. Widget / integration / golden tests are also required per the constitu
 
 **Purpose**: Bootstrap the Flutter project, install dependencies, and establish folder structure.
 
-- [ ] T001 Initialize Flutter 3.x project at repository root with `flutter create --org com.ironandstone iron_and_stone`
-- [ ] T002 Add all required dependencies to `pubspec.yaml`: `flutter_riverpod`, `drift`, `drift_flutter`, `shared_preferences`, `path_provider`, `flutter_test` (dev), `integration_test` (dev), `golden_toolkit` (dev), `build_runner` (dev), `drift_dev` (dev)
-- [ ] T003 [P] Create the full `lib/` directory tree per plan.md: `lib/domain/entities/`, `lib/domain/value_objects/`, `lib/domain/rules/`, `lib/domain/use_cases/`, `lib/state/`, `lib/ui/screens/`, `lib/ui/widgets/`, `lib/ui/theme/`, `lib/data/drift/tables/`
-- [ ] T004 [P] Create the full `test/` directory tree per plan.md: `test/domain/entities/`, `test/domain/rules/`, `test/domain/use_cases/`, `test/widget/`, `test/golden/`, `test/integration/`
-- [ ] T005 [P] Configure `analysis_options.yaml` — enable `lints` package, set `treat_warnings_as_errors: true`, add lint rules: `avoid_dynamic_calls`, `prefer_const_constructors`, `avoid_print`
-- [ ] T006 Create `lib/main.dart` — minimal `ProviderScope` + `MaterialApp` root; app entry point only, no game logic
-- [ ] T007 Create `lib/ui/theme/app_theme.dart` — medieval colour palette (`ThemeData`); placeholder serif typography; `const` constructors throughout
+- [x] T001 Initialize Flutter 3.x project at repository root with `flutter create --org com.ironandstone iron_and_stone`
+- [x] T002 Add all required dependencies to `pubspec.yaml`: `flutter_riverpod`, `drift`, `drift_flutter`, `shared_preferences`, `path_provider`, `flutter_test` (dev), `integration_test` (dev), `golden_toolkit` (dev), `build_runner` (dev), `drift_dev` (dev)
+- [x] T003 [P] Create the full `lib/` directory tree per plan.md: `lib/domain/entities/`, `lib/domain/value_objects/`, `lib/domain/rules/`, `lib/domain/use_cases/`, `lib/state/`, `lib/ui/screens/`, `lib/ui/widgets/`, `lib/ui/theme/`, `lib/data/drift/tables/`
+- [x] T004 [P] Create the full `test/` directory tree per plan.md: `test/domain/entities/`, `test/domain/rules/`, `test/domain/use_cases/`, `test/widget/`, `test/golden/`, `test/integration/`
+- [x] T005 [P] Configure `analysis_options.yaml` — enable `lints` package, set `treat_warnings_as_errors: true`, add lint rules: `avoid_dynamic_calls`, `prefer_const_constructors`, `avoid_print`
+- [x] T006 Create `lib/main.dart` — minimal `ProviderScope` + `MaterialApp` root; app entry point only, no game logic
+- [x] T007 Create `lib/ui/theme/app_theme.dart` — medieval colour palette (`ThemeData`); placeholder serif typography; `const` constructors throughout
 
 **Checkpoint**: `flutter analyze` produces zero issues; `flutter test` runs (no tests yet) without errors.
 
