@@ -5,6 +5,7 @@ import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/castle_notifier.dart';
+import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 
@@ -72,12 +73,18 @@ class CastleScreen extends ConsumerWidget {
                     peasantsInCompanies: peasantsInCompanies,
                   ),
                   const SizedBox(height: 16),
-                  // Companies at this castle
-                  if (allCompaniesHere.isNotEmpty)
-                    _CompaniesCard(
-                      companies: allCompaniesHere,
-                      castleId: castleId,
+                  // Companies at this castle — roster (player) or read-only summary (enemy/neutral)
+                  if (castleState.ownership == Ownership.player) ...[
+                    if (allCompaniesHere.isNotEmpty)
+                      _CompaniesRosterCard(
+                        companies: allCompaniesHere,
+                        castleId: castleId,
+                      ),
+                  ] else ...[
+                    _EnemyDefenderSummary(
+                      companies: stationedCompanies,
                     ),
+                  ],
                 ],
               ),
             );
@@ -92,11 +99,30 @@ class CastleScreen extends ConsumerWidget {
 // Sub-widgets
 // ---------------------------------------------------------------------------
 
-class _CompaniesCard extends StatelessWidget {
-  const _CompaniesCard({required this.companies, required this.castleId});
+/// Roster card shown for player-owned castles.
+///
+/// Lists all companies currently at this castle node. Each row is individually
+/// tappable and calls [companyNotifierProvider.selectCompany] on the selected
+/// company. The "front" (selected) company is visually highlighted with a gold
+/// border. Stationary companies are labelled "Garrisoned"; companies with an
+/// active destination are labelled "Defending".
+class _CompaniesRosterCard extends ConsumerStatefulWidget {
+  const _CompaniesRosterCard({
+    required this.companies,
+    required this.castleId,
+  });
 
   final List<CompanyOnMap> companies;
   final String castleId;
+
+  @override
+  ConsumerState<_CompaniesRosterCard> createState() =>
+      _CompaniesRosterCardState();
+}
+
+class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
+  /// Index into [widget.companies] of the currently highlighted "front" company.
+  int _frontIndex = 0;
 
   String _roleName(UnitRole role) {
     switch (role) {
@@ -113,9 +139,15 @@ class _CompaniesCard extends StatelessWidget {
     }
   }
 
+  bool _isStationary(CompanyOnMap co) =>
+      co.destination == null || co.destination!.id == co.currentNode.id;
+
   @override
   Widget build(BuildContext context) {
+    final companies = widget.companies;
+
     return Card(
+      key: const ValueKey('castle_roster_card'),
       elevation: 2,
       color: AppTheme.parchment,
       child: Padding(
@@ -139,85 +171,134 @@ class _CompaniesCard extends StatelessWidget {
             ),
             const Divider(),
             ...companies.asMap().entries.map((entry) {
-              final idx = entry.key;
+              final index = entry.key;
               final co = entry.value;
-              final isPlayer = co.ownership == Ownership.player;
-              final ownerLabel = isPlayer ? 'Your company' : 'Enemy company';
-              final ownerColor = isPlayer ? AppTheme.bloodRed : AppTheme.midnightBlue;
+              final isFront = index == _frontIndex;
+              final stationary = _isStationary(co);
+              final statusLabel = stationary ? 'Garrisoned' : 'Defending';
+              final ownerColor = co.ownership == Ownership.player
+                  ? AppTheme.bloodRed
+                  : AppTheme.midnightBlue;
               final total = co.company.totalSoldiers.value;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: ownerColor.withAlpha(80)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ExpansionTile(
-                    leading: CircleAvatar(
-                      backgroundColor: ownerColor,
-                      radius: 16,
-                      child: Text(
-                        '$total',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+                child: InkWell(
+                  key: ValueKey('roster_row_${co.id}'),
+                  onTap: () {
+                    setState(() => _frontIndex = index);
+                    ref
+                        .read(companyNotifierProvider.notifier)
+                        .selectCompany(co.id);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: isFront
+                            ? const Color(0xFFFFD700) // gold highlight
+                            : ownerColor.withAlpha(80),
+                        width: isFront ? 2.5 : 1.0,
                       ),
+                      borderRadius: BorderRadius.circular(8),
+                      color: isFront
+                          ? const Color(0xFFFFF8DC).withAlpha(180)
+                          : null,
                     ),
-                    title: Text(
-                      '$ownerLabel — $total soldiers',
-                      style: TextStyle(
-                        color: AppTheme.ironDark,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
-                    ),
-                    subtitle: co.destination != null
-                        ? Text(
-                            'Marching to: ${co.destination!.id}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.stone,
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: ownerColor,
+                            radius: 16,
+                            child: Text(
+                              '$total',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          )
-                        : const Text(
-                            'Stationed here',
-                            style: TextStyle(fontSize: 12, color: AppTheme.stone),
                           ),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Column(
-                          children: UnitRole.values
-                              .where((r) => (co.company.composition[r] ?? 0) > 0)
-                              .map((role) {
-                            final count = co.company.composition[role] ?? 0;
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _roleName(role),
-                                  style: const TextStyle(color: AppTheme.stone),
-                                ),
-                                Text(
-                                  '$count',
+                                  '$total soldiers',
                                   style: const TextStyle(
                                     color: AppTheme.ironDark,
                                     fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  statusLabel,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.stone,
                                   ),
                                 ),
                               ],
-                            );
-                          }).toList(),
-                        ),
+                            ),
+                          ),
+                          if (isFront)
+                            const Icon(
+                              Icons.star,
+                              color: Color(0xFFFFD700),
+                              size: 18,
+                            ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               );
             }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Read-only summary shown for enemy/neutral castles.
+///
+/// Displays the total number of defending soldiers. No action buttons or
+/// individual company rows are shown.
+class _EnemyDefenderSummary extends StatelessWidget {
+  const _EnemyDefenderSummary({required this.companies});
+
+  final List<CompanyOnMap> companies;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDefenders =
+        companies.fold<int>(0, (sum, co) => sum + co.company.totalSoldiers.value);
+
+    return Card(
+      key: const ValueKey('enemy_castle_defender_summary'),
+      elevation: 2,
+      color: AppTheme.parchment,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.groups, color: AppTheme.midnightBlue, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              'Defenders: $totalDefenders soldiers',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.ironDark,
+              ),
+            ),
           ],
         ),
       ),

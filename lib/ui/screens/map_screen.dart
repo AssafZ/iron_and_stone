@@ -516,9 +516,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   ) {
     final castle = matchState.castles.firstWhere((c) => c.id == castleNode.id);
     final isPlayerCastle = castle.ownership == Ownership.player;
-    final stationedCount = matchState.companies
+    final stationedCompanies = matchState.companies
         .where((co) => co.currentNode.id == castleNode.id && co.destination == null)
-        .length;
+        .toList();
+    final stationedCount = stationedCompanies.length;
+    final totalDefenders = stationedCompanies.fold<int>(
+      0,
+      (sum, co) => sum + co.company.totalSoldiers.value,
+    );
 
     showModalBottomSheet<void>(
       context: context,
@@ -554,10 +559,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                'Companies stationed: $stationedCount',
-                style: const TextStyle(color: AppTheme.stone, fontSize: 14),
-              ),
+              if (isPlayerCastle)
+                Text(
+                  'Companies stationed: $stationedCount',
+                  style: const TextStyle(color: AppTheme.stone, fontSize: 14),
+                )
+              else
+                Text(
+                  'Defenders: $totalDefenders soldiers',
+                  style: const TextStyle(color: AppTheme.stone, fontSize: 14),
+                ),
               const SizedBox(height: 16),
               if (isPlayerCastle) ...[
                 OutlinedButton.icon(

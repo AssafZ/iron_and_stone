@@ -97,18 +97,18 @@
 
 ### TDD: Tests First ⚠️ — Write these BEFORE implementation; confirm they FAIL
 
-- [ ] T031 [US2] Write failing widget test: tapping a player castle with two garrisoned companies shows a roster widget listing both companies in `test/widget/castle_screen_roster_test.dart` [NEW FILE]
-- [ ] T032 [P] [US2] Write failing widget test: selecting a company from the roster triggers selection of that company (not the other) in `test/widget/castle_screen_roster_test.dart`
-- [ ] T033 [P] [US2] Write failing widget test: dismissing the roster without selection triggers no company action in `test/widget/castle_screen_roster_test.dart`
-- [ ] T034 [P] [US2] Write failing widget test: tapping an enemy castle shows a read-only summary with total soldier count (no roster, no action buttons) in `test/widget/castle_screen_roster_test.dart`
-- [ ] T035 [P] [US2] Write failing widget test: garrisoned companies and defending companies are visually distinguishable in the roster in `test/widget/castle_screen_roster_test.dart`
+- [X] T031 [US2] Write failing widget test: tapping a player castle with two garrisoned companies shows a roster widget listing both companies in `test/widget/castle_screen_roster_test.dart` [NEW FILE]
+- [X] T032 [P] [US2] Write failing widget test: selecting a company from the roster triggers selection of that company (not the other) in `test/widget/castle_screen_roster_test.dart`
+- [X] T033 [P] [US2] Write failing widget test: dismissing the roster without selection triggers no company action in `test/widget/castle_screen_roster_test.dart`
+- [X] T034 [P] [US2] Write failing widget test: tapping an enemy castle shows a read-only summary with total soldier count (no roster, no action buttons) in `test/widget/castle_screen_roster_test.dart`
+- [X] T035 [P] [US2] Write failing widget test: garrisoned companies and defending companies are visually distinguishable in the roster in `test/widget/castle_screen_roster_test.dart`
 
 ### Implementation
 
-- [ ] T036 [US2] Update `castle_screen.dart` — player-owned castle path: update `_CompaniesCard` (or equivalent widget) to make each garrisoned company row individually tappable; tapping a row selects that company as the "front" company (navigates back to map with that company selected, or opens deploy/compose sheet); highlight the currently active front company with a visual indicator (e.g., gold border); use ephemeral local `int _frontIndex` state (no Riverpod) in `lib/ui/screens/castle_screen.dart`
-- [ ] T037 [US2] Update `map_screen.dart` — enemy/neutral castle path in `_showCastleSheet`: in the non-`isPlayerCastle` branch, replace the `'Companies stationed: $stationedCount'` text with an explicit `totalDefenders` calculation (sum of `totalSoldiers.value` for all stationary companies at the castle node) displayed as `"Defenders: $totalDefenders soldiers"`; the branch already has no action buttons — do NOT add or remove any in `lib/ui/screens/map_screen.dart`
-- [ ] T038 [US2] Run `flutter test test/widget/castle_screen_roster_test.dart` and confirm all tests pass
-- [ ] T039 [US2] Run `flutter analyze` and confirm zero issues
+- [X] T036 [US2] Update `castle_screen.dart` — player-owned castle path: update `_CompaniesCard` (or equivalent widget) to make each garrisoned company row individually tappable; tapping a row selects that company as the "front" company (navigates back to map with that company selected, or opens deploy/compose sheet); highlight the currently active front company with a visual indicator (e.g., gold border); use ephemeral local `int _frontIndex` state (no Riverpod) in `lib/ui/screens/castle_screen.dart`
+- [X] T037 [US2] Update `map_screen.dart` — enemy/neutral castle path in `_showCastleSheet`: in the non-`isPlayerCastle` branch, replace the `'Companies stationed: $stationedCount'` text with an explicit `totalDefenders` calculation (sum of `totalSoldiers.value` for all stationary companies at the castle node) displayed as `"Defenders: $totalDefenders soldiers"`; the branch already has no action buttons — do NOT add or remove any in `lib/ui/screens/map_screen.dart`
+- [X] T038 [US2] Run `flutter test test/widget/castle_screen_roster_test.dart` and confirm all tests pass
+- [X] T039 [US2] Run `flutter analyze` and confirm zero issues
 
 **Checkpoint**: US2 complete — castle garrison roster is functional; enemy castle shows read-only summary ✅
 
