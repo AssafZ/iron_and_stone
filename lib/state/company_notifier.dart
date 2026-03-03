@@ -213,7 +213,24 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     remaining.add(result.primary);
     if (result.overflow != null) remaining.add(result.overflow!);
 
-    state = AsyncData(current.copyWith(companies: remaining, selectedCompanyId: null));
+    // Update nodeOccupancy: remove both input companies, add the merged result(s).
+    final nodeId = a.currentNode.id;
+    var updatedOcc = current.nodeOccupancy;
+    final existingOcc = updatedOcc[nodeId];
+    if (existingOcc != null) {
+      var newOcc = existingOcc.withDeparture(idA).withDeparture(idB);
+      newOcc = newOcc.withArrival(result.primary.id);
+      if (result.overflow != null) {
+        newOcc = newOcc.withArrival(result.overflow!.id);
+      }
+      updatedOcc = Map<String, NodeOccupancy>.from(updatedOcc)..[nodeId] = newOcc;
+    }
+
+    state = AsyncData(current.copyWith(
+      companies: remaining,
+      selectedCompanyId: null,
+      nodeOccupancy: updatedOcc,
+    ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(remaining);
   }
 
@@ -249,7 +266,21 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     updated[idx] = result.kept;
     updated.add(result.splitOff);
 
-    state = AsyncData(current.copyWith(companies: updated, selectedCompanyId: null));
+    // Update nodeOccupancy: remove the original company, add both new companies.
+    final nodeId = original.currentNode.id;
+    var updatedOcc = current.nodeOccupancy;
+    final existingOcc = updatedOcc[nodeId];
+    if (existingOcc != null) {
+      var newOcc = existingOcc.withDeparture(id);
+      newOcc = newOcc.withArrival(result.kept.id).withArrival(result.splitOff.id);
+      updatedOcc = Map<String, NodeOccupancy>.from(updatedOcc)..[nodeId] = newOcc;
+    }
+
+    state = AsyncData(current.copyWith(
+      companies: updated,
+      selectedCompanyId: null,
+      nodeOccupancy: updatedOcc,
+    ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(updated);
   }
 

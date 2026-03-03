@@ -124,18 +124,18 @@
 
 ### TDD: Tests First ⚠️ — Write these BEFORE implementation; confirm they FAIL
 
-- [ ] T040 [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: calling `deployCompany` for a second company at an already-occupied node results in `nodeOccupancy[nodeId].orderedIds` containing both company IDs with the second at index 1 in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T041 [P] [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: when the first company departs (setDestination called), the second company compacts to slot 0 in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T042 [P] [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: three companies arrive sequentially; after the middle one departs, the remaining two occupy slots 0 and 1 (no gaps) in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T043 [P] [US3] Write failing widget test: a company marker that has compacted from slot 1 to slot 0 renders at `(0, 0)` offset in `test/widget/map_screen_offset_test.dart`
+- [X] T040 [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: calling `deployCompany` for a second company at an already-occupied node results in `nodeOccupancy[nodeId].orderedIds` containing both company IDs with the second at index 1 in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T041 [P] [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: when the first company departs (setDestination called), the second company compacts to slot 0 in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T042 [P] [US3] Write failing unit test (state layer) [MODIFY EXISTING FILE]: three companies arrive sequentially; after the middle one departs, the remaining two occupy slots 0 and 1 (no gaps) in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T043 [P] [US3] Write failing widget test: a company marker that has compacted from slot 1 to slot 0 renders at `(0, 0)` offset in `test/widget/map_screen_offset_test.dart`
 
 ### Implementation
 
-- [ ] T044 [US3] Update `mergeCompanies` in `lib/state/company_notifier.dart` to call `withDeparture(b)` (absorbed company) and `withArrival(a)` (merged company) on the node's `NodeOccupancy` entry; run `test/domain/value_objects/node_occupancy_test.dart` to confirm T040–T042 lifecycle tests pass after merge
-- [ ] T045 [US3] Update `splitCompany` in `lib/state/company_notifier.dart` to call `withDeparture(original)` and two `withArrival` calls for the two new company IDs on the node's `NodeOccupancy` entry; run `test/domain/value_objects/node_occupancy_test.dart` to confirm both new companies receive distinct, non-overlapping slots
-- [ ] T046 [US3] Run `flutter test test/domain/value_objects/node_occupancy_test.dart` and confirm all arrival/departure lifecycle tests pass
-- [ ] T047 [US3] Run `flutter test test/widget/map_screen_offset_test.dart` and confirm compaction rendering tests pass
-- [ ] T048 [US3] Run `flutter analyze` and confirm zero issues
+- [X] T044 [US3] Update `mergeCompanies` in `lib/state/company_notifier.dart` to call `withDeparture(b)` (absorbed company) and `withArrival(a)` (merged company) on the node's `NodeOccupancy` entry; run `test/domain/value_objects/node_occupancy_test.dart` to confirm T040–T042 lifecycle tests pass after merge
+- [X] T045 [US3] Update `splitCompany` in `lib/state/company_notifier.dart` to call `withDeparture(original)` and two `withArrival` calls for the two new company IDs on the node's `NodeOccupancy` entry; run `test/domain/value_objects/node_occupancy_test.dart` to confirm both new companies receive distinct, non-overlapping slots
+- [X] T046 [US3] Run `flutter test test/domain/value_objects/node_occupancy_test.dart` and confirm all arrival/departure lifecycle tests pass
+- [X] T047 [US3] Run `flutter test test/widget/map_screen_offset_test.dart` and confirm compaction rendering tests pass
+- [X] T048 [US3] Run `flutter analyze` and confirm zero issues
 
 **Checkpoint**: US3 complete — arriving/departing companies reflow correctly; all offset positions remain tappable ✅
 

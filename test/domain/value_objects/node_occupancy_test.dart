@@ -1,10 +1,47 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
+import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
+import 'package:iron_and_stone/domain/entities/match.dart';
+import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/state/company_notifier.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
+
+// ---------------------------------------------------------------------------
+// Fake MatchNotifier for state-layer lifecycle tests (T040–T042)
+// ---------------------------------------------------------------------------
+
+class _FakeMatchNotifier extends MatchNotifier {
+  final MatchState _initial;
+  _FakeMatchNotifier(this._initial);
+
+  @override
+  Future<MatchState> build() async => _initial;
+
+  @override
+  void updateCompanies(List<CompanyOnMap> companies) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(companies: companies));
+  }
+
+  @override
+  void updateCastle(Castle castle) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final updated = [
+      for (final c in current.castles)
+        if (c.id == castle.id) castle else c,
+    ];
+    state = AsyncData(current.copyWith(castles: updated));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -296,5 +333,215 @@ void main() {
       final occ2 = deriveOccupancy('nodeA', companies);
       expect(occ1.orderedIds, occ2.orderedIds);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // T040–T042: State-layer arrival/departure lifecycle (CompanyNotifier)
+  // -------------------------------------------------------------------------
+  // These tests exercise the CompanyNotifier's nodeOccupancy management —
+  // verifying that deployCompany, setDestination, mergeCompanies, and
+  // splitCompany keep orderedIds correct through real arrival/departure cycles.
+  // -------------------------------------------------------------------------
+
+  group('NodeOccupancy — state-layer arrival lifecycle (T040)', () {
+    // Shared map / castle fixtures used by T040–T042
+    const castleNode = CastleNode(
+      id: 'player_castle',
+      x: 0,
+      y: 0,
+      ownership: Ownership.player,
+    );
+    const junction = RoadJunctionNode(id: 'j1', x: 100, y: 0);
+
+    GameMap makeMap() => GameMap(
+          nodes: [castleNode, junction],
+          edges: [
+            RoadEdge(from: castleNode, to: junction, length: 100),
+            RoadEdge(from: junction, to: castleNode, length: 100),
+          ],
+        );
+
+    Match makeMatch() => Match(
+          map: makeMap(),
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+
+    Castle makeCastle({Map<UnitRole, int> garrison = const {}}) => Castle(
+          id: 'player_castle',
+          ownership: Ownership.player,
+          garrison: garrison,
+        );
+
+    ProviderContainer makeContainer({Map<UnitRole, int> garrison = const {}}) {
+      final matchState = MatchState(
+        match: makeMatch(),
+        castles: [makeCastle(garrison: garrison)],
+        companies: [],
+      );
+      return ProviderContainer(
+        overrides: [
+          matchNotifierProvider
+              .overrideWith(() => _FakeMatchNotifier(matchState)),
+        ],
+      );
+    }
+
+    test(
+      'T040: deploying a second company at an occupied node → both IDs in '
+      'nodeOccupancy with second at index 1',
+      () async {
+        final container = makeContainer(garrison: {UnitRole.warrior: 20});
+        addTearDown(container.dispose);
+
+        // Await async notifier initialization.
+        await container.read(matchNotifierProvider.future);
+        await container.read(companyNotifierProvider.future);
+
+        final notifier = container.read(companyNotifierProvider.notifier);
+        final map = makeMap();
+
+        // Deploy first company.
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+
+        // Deploy second company.
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+
+        final s = container.read(companyNotifierProvider).valueOrNull!;
+        final occ = s.nodeOccupancy[castleNode.id]!;
+
+        expect(occ.orderedIds.length, 2,
+            reason: 'Both companies must be registered in nodeOccupancy');
+        final firstId = s.companies[0].id;
+        final secondId = s.companies[1].id;
+        expect(occ.slotIndex(firstId), 0);
+        expect(occ.slotIndex(secondId), 1);
+      },
+    );
+
+    test(
+      'T041: when the first company departs (setDestination), the second '
+      'company compacts to slot 0',
+      () async {
+        final container = makeContainer(garrison: {UnitRole.warrior: 20});
+        addTearDown(container.dispose);
+
+        await container.read(matchNotifierProvider.future);
+        await container.read(companyNotifierProvider.future);
+
+        final notifier = container.read(companyNotifierProvider.notifier);
+        final map = makeMap();
+
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+
+        final stateAfterDeploy =
+            container.read(companyNotifierProvider).valueOrNull!;
+        final firstId = stateAfterDeploy.companies[0].id;
+        final secondId = stateAfterDeploy.companies[1].id;
+
+        // First company departs.
+        await notifier.setDestination(
+          companyId: firstId,
+          destination: junction,
+          map: map,
+        );
+
+        final stateAfterDepart =
+            container.read(companyNotifierProvider).valueOrNull!;
+        final occ = stateAfterDepart.nodeOccupancy[castleNode.id]!;
+
+        expect(occ.contains(firstId), isFalse,
+            reason: 'Departed company must be removed from nodeOccupancy');
+        expect(occ.slotIndex(secondId), 0,
+            reason: 'Remaining company must compact to slot 0');
+      },
+    );
+
+    test(
+      'T042: three companies arrive sequentially; after the middle one '
+      'departs, the remaining two occupy slots 0 and 1 (no gaps)',
+      () async {
+        final container = makeContainer(garrison: {UnitRole.warrior: 30});
+        addTearDown(container.dispose);
+
+        await container.read(matchNotifierProvider.future);
+        await container.read(companyNotifierProvider.future);
+
+        final notifier = container.read(companyNotifierProvider.notifier);
+        final map = makeMap();
+
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+        await notifier.deployCompany(
+          castleId: 'player_castle',
+          castleNode: castleNode,
+          composition: {UnitRole.warrior: 5},
+          map: map,
+        );
+
+        final stateAfterDeploy =
+            container.read(companyNotifierProvider).valueOrNull!;
+        final firstId = stateAfterDeploy.companies[0].id;
+        final secondId = stateAfterDeploy.companies[1].id;
+        final thirdId = stateAfterDeploy.companies[2].id;
+
+        // Verify initial order: slots 0, 1, 2.
+        final occBefore = stateAfterDeploy.nodeOccupancy[castleNode.id]!;
+        expect(occBefore.slotIndex(firstId), 0);
+        expect(occBefore.slotIndex(secondId), 1);
+        expect(occBefore.slotIndex(thirdId), 2);
+
+        // Middle company departs.
+        await notifier.setDestination(
+          companyId: secondId,
+          destination: junction,
+          map: map,
+        );
+
+        final stateAfterDepart =
+            container.read(companyNotifierProvider).valueOrNull!;
+        final occ = stateAfterDepart.nodeOccupancy[castleNode.id]!;
+
+        expect(occ.orderedIds.length, 2,
+            reason: 'Only two companies must remain');
+        expect(occ.contains(secondId), isFalse,
+            reason: 'Departed company must be absent');
+        expect(occ.slotIndex(firstId), 0,
+            reason: 'First company stays at slot 0');
+        expect(occ.slotIndex(thirdId), 1,
+            reason: 'Third company compacts to slot 1 — no gap');
+      },
+    );
   });
 }
