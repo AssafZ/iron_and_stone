@@ -35,21 +35,21 @@
 
 ### TDD: Tests First ⚠️ — Write these BEFORE any implementation; confirm they FAIL
 
-- [ ] T004 Write failing unit test: `NodeOccupancy` construction with `nodeId` and empty `orderedIds` in `test/domain/value_objects/node_occupancy_test.dart` [NEW FILE]
-- [ ] T005 [P] Write failing unit test: `withArrival` appends id and is idempotent (no-op if already present) in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T006 [P] Write failing unit test: `withDeparture` removes id and compacts remaining ids (order preserved, no gaps) in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T007 [P] Write failing unit test: `slotIndex` returns correct 0-based index or `null` if absent in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T008 [P] Write failing unit test: `contains` returns `true`/`false` correctly in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T009 [P] Write failing unit test: departure and re-arrival produces correct compacted order in `test/domain/value_objects/node_occupancy_test.dart`
-- [ ] T010 [P] Write failing unit test: `_deriveOccupancy` helper sorts stationary companies lexicographically by id (cold-start determinism) in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T004 Write failing unit test: `NodeOccupancy` construction with `nodeId` and empty `orderedIds` in `test/domain/value_objects/node_occupancy_test.dart` [NEW FILE]
+- [X] T005 [P] Write failing unit test: `withArrival` appends id and is idempotent (no-op if already present) in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T006 [P] Write failing unit test: `withDeparture` removes id and compacts remaining ids (order preserved, no gaps) in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T007 [P] Write failing unit test: `slotIndex` returns correct 0-based index or `null` if absent in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T008 [P] Write failing unit test: `contains` returns `true`/`false` correctly in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T009 [P] Write failing unit test: departure and re-arrival produces correct compacted order in `test/domain/value_objects/node_occupancy_test.dart`
+- [X] T010 [P] Write failing unit test: `_deriveOccupancy` helper sorts stationary companies lexicographically by id (cold-start determinism) in `test/domain/value_objects/node_occupancy_test.dart`
 
 ### Implementation
 
-- [ ] T011 Implement `NodeOccupancy` value object (immutable, pure Dart, no Flutter imports) in `lib/domain/value_objects/node_occupancy.dart` [NEW FILE] — fields: `nodeId`, `orderedIds`; methods: `withArrival`, `withDeparture`, `slotIndex`, `contains`
-- [ ] T012 Run `flutter test test/domain/value_objects/node_occupancy_test.dart` and confirm ALL tests pass (Green)
-- [ ] T013 Add `nodeOccupancy` field (`Map<String, NodeOccupancy>`) to `CompanyListState` and update `copyWith` in `lib/state/company_notifier.dart`; default value is `const {}`
-- [ ] T014 Implement `_deriveOccupancy` helper and `_isStationary` predicate in `lib/state/company_notifier.dart` (these live in the state layer; `NodeOccupancy` construction via sorted-by-id approach from data-model.md §1)
-- [ ] T015 Run `flutter analyze` and confirm zero issues
+- [X] T011 Implement `NodeOccupancy` value object (immutable, pure Dart, no Flutter imports) in `lib/domain/value_objects/node_occupancy.dart` [NEW FILE] — fields: `nodeId`, `orderedIds`; methods: `withArrival`, `withDeparture`, `slotIndex`, `contains`
+- [X] T012 Run `flutter test test/domain/value_objects/node_occupancy_test.dart` and confirm ALL tests pass (Green)
+- [X] T013 Add `nodeOccupancy` field (`Map<String, NodeOccupancy>`) to `CompanyListState` and update `copyWith` in `lib/state/company_notifier.dart`; default value is `const {}`
+- [X] T014 Implement `_deriveOccupancy` helper and `_isStationary` predicate in `lib/state/company_notifier.dart` (these live in the state layer; `NodeOccupancy` construction via sorted-by-id approach from data-model.md §1)
+- [X] T015 Run `flutter analyze` and confirm zero issues
 
 **Checkpoint**: `NodeOccupancy` is green-tested and available in state — user stories can now proceed
 

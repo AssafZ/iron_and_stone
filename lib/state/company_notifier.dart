@@ -7,6 +7,7 @@ import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
 import 'package:iron_and_stone/domain/use_cases/merge_companies.dart';
 import 'package:iron_and_stone/domain/use_cases/move_company.dart';
 import 'package:iron_and_stone/domain/use_cases/split_company.dart';
+import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 
 /// State for the company list + current selection.
@@ -16,20 +17,30 @@ final class CompanyListState {
   /// The ID of the currently selected Company for two-step tap-to-move UX.
   final String? selectedCompanyId;
 
+  /// Per-node occupancy map: keyed by node ID, holds the ordered slot
+  /// assignment for stationary companies at that node.
+  ///
+  /// Transient UI state — not persisted between sessions.
+  /// Default is an empty map.
+  final Map<String, NodeOccupancy> nodeOccupancy;
+
   const CompanyListState({
     this.companies = const [],
     this.selectedCompanyId,
+    this.nodeOccupancy = const {},
   });
 
   CompanyListState copyWith({
     List<CompanyOnMap>? companies,
     Object? selectedCompanyId = _sentinel,
+    Map<String, NodeOccupancy>? nodeOccupancy,
   }) {
     return CompanyListState(
       companies: companies ?? this.companies,
       selectedCompanyId: identical(selectedCompanyId, _sentinel)
           ? this.selectedCompanyId
           : selectedCompanyId as String?,
+      nodeOccupancy: nodeOccupancy ?? this.nodeOccupancy,
     );
   }
 
@@ -238,3 +249,33 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 /// The global [CompanyNotifier] provider.
 final companyNotifierProvider =
     AsyncNotifierProvider<CompanyNotifier, CompanyListState>(CompanyNotifier.new);
+
+// ---------------------------------------------------------------------------
+// State-layer helpers (re-exposed from domain for convenience)
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if [company] is stationary at its current node:
+/// - destination is null, OR
+/// - destination.id == currentNode.id
+bool _isStationary(CompanyOnMap company) => isStationary(company);
+
+/// Derives a [NodeOccupancy] for [nodeId] from [allCompanies] using the
+/// cold-start deterministic approach (lexicographic sort by id).
+NodeOccupancy _deriveOccupancy(
+  String nodeId,
+  List<CompanyOnMap> allCompanies,
+) =>
+    deriveOccupancy(nodeId, allCompanies);
+
+/// Rebuilds the full [nodeOccupancy] map for all nodes represented in
+/// [companies]. Only stationary companies are included.
+// ignore: unused_element
+Map<String, NodeOccupancy> _rebuildOccupancyMap(List<CompanyOnMap> companies) {
+  final nodeIds = companies
+      .where(_isStationary)
+      .map((c) => c.currentNode.id)
+      .toSet();
+  return {
+    for (final nodeId in nodeIds) nodeId: _deriveOccupancy(nodeId, companies),
+  };
+}
