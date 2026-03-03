@@ -19,9 +19,9 @@
 
 **Purpose**: Verify project health and confirm existing file locations before making changes.
 
-- [ ] T001 Confirm existing file locations: `lib/domain/use_cases/check_collisions.dart`, `lib/state/company_notifier.dart`, `lib/ui/screens/map_screen.dart`, `lib/ui/screens/castle_screen.dart`, `lib/ui/widgets/company_marker.dart`
-- [ ] T002 [P] Confirm existing test locations: `test/domain/use_cases/check_collisions_test.dart`, `test/widget/`, `test/golden/`
-- [ ] T003 Run `flutter analyze` from repo root and confirm zero issues before any changes
+- [X] T001 Confirm existing file locations: `lib/domain/use_cases/check_collisions.dart`, `lib/state/company_notifier.dart`, `lib/ui/screens/map_screen.dart`, `lib/ui/screens/castle_screen.dart`, `lib/ui/widgets/company_marker.dart`
+- [X] T002 [P] Confirm existing test locations: `test/domain/use_cases/check_collisions_test.dart`, `test/widget/`, `test/golden/`
+- [X] T003 Run `flutter analyze` from repo root and confirm zero issues before any changes
 
 **Checkpoint**: Existing file paths confirmed — ready to begin foundational work
 
