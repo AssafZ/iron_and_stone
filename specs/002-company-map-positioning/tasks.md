@@ -170,12 +170,12 @@
 
 **Purpose**: Final integration validation, performance check, and cleanup across all stories.
 
-- [ ] T058 [P] Run full test suite `flutter test` and confirm all tests pass (domain, widget, golden, integration)
-- [ ] T059 [P] Run `flutter analyze` — zero issues (treat warnings as errors per CI gate)
+- [X] T058 [P] Run full test suite `flutter test` and confirm all tests pass (domain, widget, golden, integration)
+- [X] T059 [P] Run `flutter analyze` — zero issues (treat warnings as errors per CI gate)
 - [ ] T060 Profile map rendering with Flutter DevTools: confirm 60 fps on target device; capture DevTools screenshot as PR evidence (Constitution Principle IV)
-- [ ] T061 [P] Verify `RepaintBoundary` is still present at `CompanyMarker` boundaries after all widget changes in `lib/ui/widgets/company_marker.dart`
-- [ ] T062 [P] Verify all `CompanyMarker` instances have `SizedBox(width: 44, height: 44)` — no instance uses a smaller box in `lib/ui/screens/map_screen.dart`
-- [ ] T063 Update `specs/002-company-map-positioning/checklists/requirements.md` to mark implementation complete
+- [X] T061 [P] Verify `RepaintBoundary` is still present at `CompanyMarker` boundaries after all widget changes in `lib/ui/widgets/company_marker.dart`
+- [X] T062 [P] Verify all `CompanyMarker` instances have `SizedBox(width: 44, height: 44)` — no instance uses a smaller box in `lib/ui/screens/map_screen.dart`
+- [X] T063 Update `specs/002-company-map-positioning/checklists/requirements.md` to mark implementation complete
 
 ---
 
