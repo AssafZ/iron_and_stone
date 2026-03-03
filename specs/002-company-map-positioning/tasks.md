@@ -149,18 +149,18 @@
 
 ### TDD: Tests First ⚠️ — Write these BEFORE implementation; confirm they FAIL
 
-- [ ] T049 [US4] Write failing unit test: `CheckCollisions` — in-transit same-owner company at a node occupied only by friendly stationary companies → no `roadCollision` returned in `test/domain/use_cases/check_collisions_test.dart` [MODIFY EXISTING]
-- [ ] T050 [P] [US4] Write failing unit test: `CheckCollisions` — in-transit enemy company at a node occupied by a stationary player company → `roadCollision` triggered in `test/domain/use_cases/check_collisions_test.dart`
-- [ ] T051 [P] [US4] Write failing unit test: `CheckCollisions` — in-transit player company at a node occupied by a stationary enemy company → `roadCollision` triggered in `test/domain/use_cases/check_collisions_test.dart`
-- [ ] T052 [P] [US4] Write failing unit test: stationary company at a node is NOT displaced/merged when a friendly in-transit company passes through in `test/domain/use_cases/check_collisions_test.dart`
-- [ ] T053 [P] [US4] Write failing unit test: `_isStationary` correctly classifies companies (null destination → stationary; destination == currentNode → stationary; destination ≠ currentNode → in transit) in `test/domain/use_cases/check_collisions_test.dart`
+- [X] T049 [US4] Write failing unit test: `CheckCollisions` — in-transit same-owner company at a node occupied only by friendly stationary companies → no `roadCollision` returned in `test/domain/use_cases/check_collisions_test.dart` [MODIFY EXISTING]
+- [X] T050 [P] [US4] Write failing unit test: `CheckCollisions` — in-transit enemy company at a node occupied by a stationary player company → `roadCollision` triggered in `test/domain/use_cases/check_collisions_test.dart`
+- [X] T051 [P] [US4] Write failing unit test: `CheckCollisions` — in-transit player company at a node occupied by a stationary enemy company → `roadCollision` triggered in `test/domain/use_cases/check_collisions_test.dart`
+- [X] T052 [P] [US4] Write failing unit test: stationary company at a node is NOT displaced/merged when a friendly in-transit company passes through in `test/domain/use_cases/check_collisions_test.dart`
+- [X] T053 [P] [US4] Write failing unit test: `_isStationary` correctly classifies companies (null destination → stationary; destination == currentNode → stationary; destination ≠ currentNode → in transit) in `test/domain/use_cases/check_collisions_test.dart`
 
 ### Implementation
 
-- [ ] T054 [US4] Update `CheckCollisions` use case in `lib/domain/use_cases/check_collisions.dart`: add `_isStationary(CompanyOnMap)` and `_isInTransit(CompanyOnMap)` private helpers; update the node-grouping collision loop to skip triggering `roadCollision` when an in-transit company shares a node **only** with same-owner companies; retain `roadCollision` trigger when an in-transit company shares a node with any opposing company (stationary or in-transit)
-- [ ] T055 [US4] Run `flutter test test/domain/use_cases/check_collisions_test.dart` and confirm ALL tests pass (including pre-existing tests — no regressions)
-- [ ] T056 [US4] Run `flutter test` (full suite) and confirm all tests pass
-- [ ] T057 [US4] Run `flutter analyze` and confirm zero issues
+- [X] T054 [US4] Update `CheckCollisions` use case in `lib/domain/use_cases/check_collisions.dart`: add `_isStationary(CompanyOnMap)` and `_isInTransit(CompanyOnMap)` private helpers; update the node-grouping collision loop to skip triggering `roadCollision` when an in-transit company shares a node **only** with same-owner companies; retain `roadCollision` trigger when an in-transit company shares a node with any opposing company (stationary or in-transit)
+- [X] T055 [US4] Run `flutter test test/domain/use_cases/check_collisions_test.dart` and confirm ALL tests pass (including pre-existing tests — no regressions)
+- [X] T056 [US4] Run `flutter test` (full suite) and confirm all tests pass
+- [X] T057 [US4] Run `flutter analyze` and confirm zero issues
 
 **Checkpoint**: US4 complete — same-owner pass-through works; enemy intercept still triggers battle ✅
 
