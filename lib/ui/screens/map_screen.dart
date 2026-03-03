@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/data/settings_repository.dart';
-import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
@@ -16,6 +16,49 @@ import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
 import 'package:iron_and_stone/ui/widgets/split_slider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// ---------------------------------------------------------------------------
+// Slot offset table (FR-003)
+// ---------------------------------------------------------------------------
+
+/// Pixel offsets for company markers sharing a node.
+///
+/// Index = slot number (arrival order, 0-based).
+/// Slot 0 = centre (no offset); slots 1–4 = cardinal neighbours at Δ20 px;
+/// slots 5+ = diagonal spiral continuation at Δ20 increments.
+const List<(double, double)> _kSlotOffsets = [
+  (0.0, 0.0),      // slot 0 — centre
+  (20.0, 0.0),     // slot 1 — right
+  (-20.0, 0.0),    // slot 2 — left
+  (0.0, -20.0),    // slot 3 — above
+  (0.0, 20.0),     // slot 4 — below
+  (-20.0, -20.0),  // slot 5
+  (20.0, -20.0),   // slot 6
+  (-20.0, 20.0),   // slot 7
+  (20.0, 20.0),    // slot 8
+];
+
+/// Returns the pixel offset `(dx, dy)` for [company] given the current
+/// [occupancy] map.
+///
+/// In-transit companies (destination ≠ currentNode) always return `(0, 0)`
+/// because their visual position is interpolated along the road — not snapped
+/// to a node slot.
+(double, double) _offsetForCompany(
+  CompanyOnMap company,
+  Map<String, NodeOccupancy> occupancy,
+) {
+  if (company.destination != null &&
+      company.destination!.id != company.currentNode.id) {
+    return (0.0, 0.0);
+  }
+  final occ = occupancy[company.currentNode.id];
+  if (occ == null) return (0.0, 0.0);
+  final slot = occ.slotIndex(company.id);
+  if (slot == null) return (0.0, 0.0);
+  if (slot >= _kSlotOffsets.length) return (0.0, 0.0);
+  return _kSlotOffsets[slot];
+}
 
 /// The main gameplay screen — renders the map, castle nodes, and Company markers.
 ///
@@ -278,23 +321,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // currentNode and the next node using stored progress plus
                   // elapsed time since the last logic tick, so markers slide
                   // smoothly across the map in real time.
+                  //
+                  // Stationary companies at the same node are spread across
+                  // offset slots from NodeOccupancy so every marker has its
+                  // own 44 × 44 pt tap target (FR-001, FR-003).
                   ...companies.map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
+                    final (ox, oy) =
+                        _offsetForCompany(co, companyState.nodeOccupancy);
 
                     return Positioned(
-                      left: cx - 18,
-                      top: cy - 18,
-                      child: CompanyMarker(
-                        key: ValueKey('company_marker_${co.id}'),
-                        company: co,
-                        x: cx,
-                        y: cy,
-                        isSelected: isSelected,
-                        onTap: () => _onCompanyTap(context, co, companyState),
-                        onLongPress: co.ownership == Ownership.player
-                            ? () => _onCompanyLongPress(context, co)
-                            : null,
+                      key: ValueKey('positioned_${co.id}'),
+                      left: cx + ox - 22,
+                      top: cy + oy - 22,
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: CompanyMarker(
+                          key: ValueKey('company_marker_${co.id}'),
+                          company: co,
+                          x: cx + ox,
+                          y: cy + oy,
+                          isSelected: isSelected,
+                          onTap: () => _onCompanyTap(context, co, companyState),
+                          onLongPress: co.ownership == Ownership.player
+                              ? () => _onCompanyLongPress(context, co)
+                              : null,
+                        ),
                       ),
                     );
                   }),

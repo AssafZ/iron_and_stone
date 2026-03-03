@@ -63,27 +63,27 @@
 
 ### TDD: Tests First ⚠️ — Write these BEFORE implementation; confirm they FAIL
 
-- [ ] T016 [US1] Write failing widget test: two companies at the same node each render at distinct `Positioned` offsets (not identical `left`/`top`) in `test/widget/map_screen_offset_test.dart` [NEW FILE]
-- [ ] T017 [P] [US1] Write failing widget test: tapping the first company fires `onTap` for company A and NOT company B in `test/widget/map_screen_offset_test.dart`
-- [ ] T018 [P] [US1] Write failing widget test: tapping the second company fires `onTap` for company B and NOT company A in `test/widget/map_screen_offset_test.dart`
-- [ ] T019 [P] [US1] Write failing widget test: three companies at the same node each have distinct offset positions in `test/widget/map_screen_offset_test.dart`
-- [ ] T020 [P] [US1] Write failing golden test: 2 companies at same node render at correct slot-0 (centre) and slot-1 (right) positions in `test/golden/map_node_offset_golden_test.dart` [NEW FILE]
-- [ ] T021 [P] [US1] Write failing golden test: 3 companies at same node render at slot-0, slot-1, slot-2 positions in `test/golden/map_node_offset_golden_test.dart`
-- [ ] T022 [P] [US1] Write failing golden test: 5 companies at same node render at all 5 slot positions in `test/golden/map_node_offset_golden_test.dart`
-- [ ] T022a [P] [US1] Write failing widget test: an in-transit company at a node renders with the in-transit visual style (distinct from stationary — e.g., reduced opacity, dashed border, or motion indicator) in `test/widget/map_screen_offset_test.dart` — covers FR-008
-- [ ] T022b [P] [US1] Write failing widget test: when a player company is already selected and the player taps a second same-owner company at the same node, the merge prompt is presented (not suppressed by offset UI) in `test/widget/map_screen_offset_test.dart` — covers FR-011
+- [X] T016 [US1] Write failing widget test: two companies at the same node each render at distinct `Positioned` offsets (not identical `left`/`top`) in `test/widget/map_screen_offset_test.dart` [NEW FILE]
+- [X] T017 [P] [US1] Write failing widget test: tapping the first company fires `onTap` for company A and NOT company B in `test/widget/map_screen_offset_test.dart`
+- [X] T018 [P] [US1] Write failing widget test: tapping the second company fires `onTap` for company B and NOT company A in `test/widget/map_screen_offset_test.dart`
+- [X] T019 [P] [US1] Write failing widget test: three companies at the same node each have distinct offset positions in `test/widget/map_screen_offset_test.dart`
+- [X] T020 [P] [US1] Write failing golden test: 2 companies at same node render at correct slot-0 (centre) and slot-1 (right) positions in `test/golden/map_node_offset_golden_test.dart` [NEW FILE]
+- [X] T021 [P] [US1] Write failing golden test: 3 companies at same node render at slot-0, slot-1, slot-2 positions in `test/golden/map_node_offset_golden_test.dart`
+- [X] T022 [P] [US1] Write failing golden test: 5 companies at same node render at all 5 slot positions in `test/golden/map_node_offset_golden_test.dart`
+- [X] T022a [P] [US1] Write failing widget test: an in-transit company at a node renders with the in-transit visual style (distinct from stationary — e.g., reduced opacity, dashed border, or motion indicator) in `test/widget/map_screen_offset_test.dart` — covers FR-008
+- [X] T022b [P] [US1] Write failing widget test: when a player company is already selected and the player taps a second same-owner company at the same node, the merge prompt is presented (not suppressed by offset UI) in `test/widget/map_screen_offset_test.dart` — covers FR-011
 
 ### Implementation
 
-- [ ] T023 [US1] Update `CompanyMarker` to enforce 44 × 44 pt minimum tap target: wrap existing `RepaintBoundary > GestureDetector > _buildMarker()` in `SizedBox(width: 44, height: 44)`; set `HitTestBehavior.opaque` on `GestureDetector`; centre the 36 × 36 visual circle with `Center` in `lib/ui/widgets/company_marker.dart`
-- [ ] T023a [US1] Implement in-transit visual distinction in `lib/ui/widgets/company_marker.dart`: when `company.destination != null && company.destination!.id != company.currentNode.id`, render the marker with a distinct style (e.g., `Opacity(opacity: 0.65)` wrapper or dashed border) to satisfy FR-008; update `_buildMarker()` to branch on transit state
-- [ ] T024 [US1] Add `_kSlotOffsets` compile-time constant list (`List<(double dx, double dy)>`) with entries for slots 0–4 **plus a slot-5+ spiral extension** (additional entries at Δ20 increments: `(-20,-20)`, `(20,-20)`, `(-20,20)`, `(20,20)`, continuing outward) to `lib/ui/screens/map_screen.dart` — satisfies FR-003 (≥5 companies, extended pattern)
-- [ ] T025 [US1] Add `_offsetForCompany` private pure function to `lib/ui/screens/map_screen.dart`: accepts `CompanyOnMap` and `Map<String, NodeOccupancy>`, returns `(double dx, double dy)` from the slot table (returns `(0, 0)` for in-transit companies)
-- [ ] T026 [US1] Update `_buildMap` company marker loop in `lib/ui/screens/map_screen.dart` to: call `_offsetForCompany`, wrap `CompanyMarker` in `SizedBox(width: 44, height: 44)`, apply offset to `Positioned` (`left: cx + ox - 22`, `top: cy + oy - 22`)
-- [ ] T027 [US1] Implement `nodeOccupancy` lifecycle events in `lib/state/company_notifier.dart`: `deployCompany` calls `withArrival`; `setDestination` (when company was stationary) calls `withDeparture`; update `advanceTick` to call `_deriveOccupancy` at the end of its tick pass for all nodes that had stationary changes (this is the `_onTickReconcile` step — it is NOT a new public method; it augments `advanceTick` inline)
-- [ ] T028 [US1] Run `flutter test test/widget/map_screen_offset_test.dart` and confirm all tests pass
-- [ ] T029 [US1] Run `flutter test test/golden/map_node_offset_golden_test.dart` and update goldens if needed (`--update-goldens`); confirm visual output matches spec slot table
-- [ ] T030 [US1] Run `flutter analyze` and confirm zero issues
+- [X] T023 [US1] Update `CompanyMarker` to enforce 44 × 44 pt minimum tap target: wrap existing `RepaintBoundary > GestureDetector > _buildMarker()` in `SizedBox(width: 44, height: 44)`; set `HitTestBehavior.opaque` on `GestureDetector`; centre the 36 × 36 visual circle with `Center` in `lib/ui/widgets/company_marker.dart`
+- [X] T023a [US1] Implement in-transit visual distinction in `lib/ui/widgets/company_marker.dart`: when `company.destination != null && company.destination!.id != company.currentNode.id`, render the marker with a distinct style (e.g., `Opacity(opacity: 0.65)` wrapper or dashed border) to satisfy FR-008; update `_buildMarker()` to branch on transit state
+- [X] T024 [US1] Add `_kSlotOffsets` compile-time constant list (`List<(double dx, double dy)>`) with entries for slots 0–4 **plus a slot-5+ spiral extension** (additional entries at Δ20 increments: `(-20,-20)`, `(20,-20)`, `(-20,20)`, `(20,20)`, continuing outward) to `lib/ui/screens/map_screen.dart` — satisfies FR-003 (≥5 companies, extended pattern)
+- [X] T025 [US1] Add `_offsetForCompany` private pure function to `lib/ui/screens/map_screen.dart`: accepts `CompanyOnMap` and `Map<String, NodeOccupancy>`, returns `(double dx, double dy)` from the slot table (returns `(0, 0)` for in-transit companies)
+- [X] T026 [US1] Update `_buildMap` company marker loop in `lib/ui/screens/map_screen.dart` to: call `_offsetForCompany`, wrap `CompanyMarker` in `SizedBox(width: 44, height: 44)`, apply offset to `Positioned` (`left: cx + ox - 22`, `top: cy + oy - 22`)
+- [X] T027 [US1] Implement `nodeOccupancy` lifecycle events in `lib/state/company_notifier.dart`: `deployCompany` calls `withArrival`; `setDestination` (when company was stationary) calls `withDeparture`; update `advanceTick` to call `_deriveOccupancy` at the end of its tick pass for all nodes that had stationary changes (this is the `_onTickReconcile` step — it is NOT a new public method; it augments `advanceTick` inline)
+- [X] T028 [US1] Run `flutter test test/widget/map_screen_offset_test.dart` and confirm all tests pass
+- [X] T029 [US1] Run `flutter test test/golden/map_node_offset_golden_test.dart` and update goldens if needed (`--update-goldens`); confirm visual output matches spec slot table
+- [X] T030 [US1] Run `flutter analyze` and confirm zero issues
 
 **Checkpoint**: US1 complete — all companies at a road junction node are individually tappable ✅
 

@@ -113,7 +113,15 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     // Add Company to the list.
     final current = state.valueOrNull ?? const CompanyListState();
     final updated = [...current.companies, result.company];
-    state = AsyncData(current.copyWith(companies: updated));
+
+    // Record the new company's arrival slot in NodeOccupancy.
+    final nodeId = castleNode.id;
+    final existingOcc = current.nodeOccupancy[nodeId] ??
+        NodeOccupancy(nodeId: nodeId, orderedIds: []);
+    final updatedOcc = Map<String, NodeOccupancy>.from(current.nodeOccupancy)
+      ..[nodeId] = existingOcc.withArrival(result.company.id);
+
+    state = AsyncData(current.copyWith(companies: updated, nodeOccupancy: updatedOcc));
 
     // Sync companies back to match notifier.
     ref.read(matchNotifierProvider.notifier).updateCompanies(updated);
@@ -150,7 +158,24 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     );
 
     final newList = List<CompanyOnMap>.from(sourceList)..[idx] = updated;
-    state = AsyncData(current.copyWith(companies: newList, selectedCompanyId: null));
+
+    // If the company was stationary, remove it from its node's occupancy slot
+    // (it is now departing and should not occupy a static offset position).
+    var updatedOcc = current.nodeOccupancy;
+    if (_isStationary(company)) {
+      final nodeId = company.currentNode.id;
+      final existingOcc = updatedOcc[nodeId];
+      if (existingOcc != null) {
+        updatedOcc = Map<String, NodeOccupancy>.from(updatedOcc)
+          ..[nodeId] = existingOcc.withDeparture(companyId);
+      }
+    }
+
+    state = AsyncData(current.copyWith(
+      companies: newList,
+      selectedCompanyId: null,
+      nodeOccupancy: updatedOcc,
+    ));
 
     ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
   }
@@ -241,7 +266,14 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
       return moveUseCase.advance(company: co, map: map, tickSeconds: tickSeconds);
     }).toList();
 
-    state = AsyncData(current.copyWith(companies: advanced));
+    // _onTickReconcile: rebuild the full nodeOccupancy map after advancing
+    // positions — companies may have arrived at a new node (becoming stationary)
+    // or departed from their previous node (now in transit).  Using
+    // _rebuildOccupancyMap gives a deterministic lexicographic ordering for any
+    // newly stationary company while preserving nothing for in-transit ones.
+    final reconciledOcc = _rebuildOccupancyMap(advanced);
+
+    state = AsyncData(current.copyWith(companies: advanced, nodeOccupancy: reconciledOcc));
     ref.read(matchNotifierProvider.notifier).updateCompanies(advanced);
   }
 }
@@ -269,7 +301,6 @@ NodeOccupancy _deriveOccupancy(
 
 /// Rebuilds the full [nodeOccupancy] map for all nodes represented in
 /// [companies]. Only stationary companies are included.
-// ignore: unused_element
 Map<String, NodeOccupancy> _rebuildOccupancyMap(List<CompanyOnMap> companies) {
   final nodeIds = companies
       .where(_isStationary)

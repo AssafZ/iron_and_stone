@@ -33,15 +33,35 @@ class CompanyMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: GestureDetector(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: _buildMarker(),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: GestureDetector(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          behavior: HitTestBehavior.opaque,
+          child: Center(child: _buildMarker()),
+        ),
       ),
     );
   }
 
+  /// Returns `true` when the company is actively moving toward a different node.
+  bool get _isInTransit =>
+      company.destination != null &&
+      company.destination!.id != company.currentNode.id;
+
   Widget _buildMarker() {
+    final marker = _buildVisualMarker();
+    // FR-008: in-transit companies render at reduced opacity so the player can
+    // distinguish moving markers from stationary ones at a glance.
+    if (_isInTransit) {
+      return Opacity(opacity: 0.65, child: marker);
+    }
+    return marker;
+  }
+
+  Widget _buildVisualMarker() {
     final ownerColor = company.ownership == Ownership.player
         ? AppTheme.bloodRed
         : AppTheme.midnightBlue;
