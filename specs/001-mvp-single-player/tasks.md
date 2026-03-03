@@ -1,0 +1,402 @@
+# Tasks: Iron & Stone MVP — Single-Player Mode
+
+**Input**: Design documents from `/specs/001-mvp-single-player/`  
+**Prerequisites**: plan.md ✅, spec.md ✅  
+**Branch**: `001-mvp-single-player`  
+**Generated**: 2026-03-02
+
+**Constitution note (TDD)**: The spec and plan mandate Red-Green-Refactor TDD for all domain-layer
+changes (Principle III). Test tasks are therefore **required** for every domain entity, rule, and
+use-case. Widget / integration / golden tests are also required per the constitution.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (no shared-file dependency)
+- **[Story]**: User story this task belongs to (US1–US6)
+- Exact file paths are included in every task description
+
+---
+
+## Phase 1: Setup (Project Initialization)
+
+**Purpose**: Bootstrap the Flutter project, install dependencies, and establish folder structure.
+
+- [x] T001 Initialize Flutter 3.x project at repository root with `flutter create --org com.ironandstone iron_and_stone`
+- [x] T002 Add all required dependencies to `pubspec.yaml`: `flutter_riverpod`, `drift`, `drift_flutter`, `shared_preferences`, `path_provider`, `flutter_test` (dev), `integration_test` (dev), `golden_toolkit` (dev), `build_runner` (dev), `drift_dev` (dev)
+- [x] T003 [P] Create the full `lib/` directory tree per plan.md: `lib/domain/entities/`, `lib/domain/value_objects/`, `lib/domain/rules/`, `lib/domain/use_cases/`, `lib/state/`, `lib/ui/screens/`, `lib/ui/widgets/`, `lib/ui/theme/`, `lib/data/drift/tables/`
+- [x] T004 [P] Create the full `test/` directory tree per plan.md: `test/domain/entities/`, `test/domain/rules/`, `test/domain/use_cases/`, `test/widget/`, `test/golden/`, `test/integration/`
+- [x] T005 [P] Configure `analysis_options.yaml` — enable `lints` package, set `treat_warnings_as_errors: true`, add lint rules: `avoid_dynamic_calls`, `prefer_const_constructors`, `avoid_print`
+- [x] T006 Create `lib/main.dart` — minimal `ProviderScope` + `MaterialApp` root; app entry point only, no game logic
+- [x] T007 Create `lib/ui/theme/app_theme.dart` — medieval colour palette (`ThemeData`); placeholder serif typography; `const` constructors throughout
+
+**Checkpoint**: `flutter analyze` produces zero issues; `flutter test` runs (no tests yet) without errors.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Core domain entities and value objects that every user story depends on. MUST be complete before any user-story phase begins.
+
+**⚠️ CRITICAL**: No user-story work can begin until this phase is complete.
+
+### Tests for Foundational Entities *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T008 [P] Write failing unit tests for `SoldierCount` in `test/domain/entities/soldier_count_test.dart`: valid range [0, 50], construction at 0 and 50, rejection of −1 and 51
+- [x] T009 [P] Write failing unit tests for `Ownership` in `test/domain/entities/ownership_test.dart`: values player/ai/neutral, equality, serialization round-trip
+- [x] T010 [P] Write failing unit tests for `UnitRole` in `test/domain/entities/unit_role_test.dart`: all five roles exist; stats match spec (HP, DMG, speed per FR-016, FR-009); `range` field present (Peasant/Warrior/Knight/Archer melee=1; Archer=3, Catapult=5); special-ability tag present for Knight, Archer, Catapult, Peasant
+
+### Implementation of Foundational Entities
+
+- [x] T011 [P] Implement `lib/domain/value_objects/soldier_count.dart` — validated `int` ∈ [0, 50]; throws `ArgumentError` outside range; make T008 pass
+- [x] T012 [P] Implement `lib/domain/value_objects/ownership.dart` — sealed enum `player | ai | neutral`; make T009 pass
+- [x] T013 Implement `lib/domain/entities/unit_role.dart` — enum `Peasant | Warrior | Knight | Archer | Catapult` with const fields `hp`, `damage`, `speed`, `range`, `specialAbility`; values: Peasant (10 HP, 0 DMG, speed 5, range 1), Warrior (50 HP, 15 DMG, speed 6, range 1), Knight (100 HP, 40 DMG, speed 10, range 1), Archer (30 HP, 25 DMG, speed 6, range 3), Catapult (150 HP, 60 DMG, speed 3, range 5); make T010 pass
+
+### Tests for Foundational Compound Entities *(write first, confirm FAILING)*
+
+- [x] T014 [P] Write failing unit tests for `Company` in `test/domain/entities/company_test.dart`: composition map integrity, `totalSoldiers` ≤ 50 enforced, `movementSpeed` equals minimum role speed, adding soldiers beyond cap rejected
+- [x] T015 [P] Write failing unit tests for `Castle` in `test/domain/entities/castle_test.dart`: garrison reservoir initialises correctly as a flat `Map<UnitRole, int>` pool (total counts by role, not a list of Company slots); ownership field; base cap 250; Peasant bonus calculation (+5% per Peasant for both growth rate and cap)
+- [x] T016 [P] Write failing unit tests for `MapNode` in `test/domain/entities/map_node_test.dart`: castle vs road-junction node types, position fields
+- [x] T017 [P] Write failing unit tests for `RoadEdge` in `test/domain/entities/road_edge_test.dart`: directed/undirected, connects exactly two nodes, no self-loops
+- [x] T018 [P] Write failing unit tests for `GameMap` in `test/domain/entities/game_map_test.dart`: node and edge collection, `pathBetween` returns a valid road-only sequence, returns empty/null for disconnected nodes
+- [x] T019 [P] Write failing unit tests for `Battle` in `test/domain/entities/battle_test.dart`: participants non-empty per side, initial round state is zero, outcome field starts null
+- [x] T020 [P] Write failing unit tests for `Match` in `test/domain/entities/match_test.dart`: contains valid GameMap, two distinct players, elapsed time starts at zero, win condition is `totalConquest`
+
+### Implementation of Foundational Compound Entities
+
+- [x] T021 Implement `lib/domain/entities/company.dart` — `Map<UnitRole, int>` composition; `SoldierCount totalSoldiers`; derived `int movementSpeed` (min of present role speeds); immutable; `copyWith`; make T014 pass
+- [x] T022 Implement `lib/domain/entities/castle.dart` — `garrison` is a flat `Map<UnitRole, int>` (total units available by role, not Company slots); `Ownership ownership`; `int cap` (base 250); `double growthRateMultiplier` (1.0 + 0.05 × peasantCount); `copyWith`; make T015 pass
+- [x] T023 [P] Implement `lib/domain/entities/map_node.dart` — sealed class variants `CastleNode` / `RoadJunctionNode`; `(double x, double y) position`; `String id`; make T016 pass
+- [x] T024 [P] Implement `lib/domain/entities/road_edge.dart` — `MapNode from`, `MapNode to`, `double length`; equality by node pair; make T017 pass
+- [x] T025 Implement `lib/domain/entities/game_map.dart` — `List<MapNode> nodes`, `List<RoadEdge> edges`, `List<MapNode> pathBetween(MapNode a, MapNode b)` (BFS/Dijkstra, road-only); make T018 pass
+- [x] T026 [P] Implement `lib/domain/entities/battle.dart` — `List<Company> attackers`, `List<Company> defenders`, `int roundNumber`, `List<String> roundLog`, `BattleOutcome? outcome`; make T019 pass
+- [x] T027 Implement `lib/domain/entities/match.dart` — `GameMap map`, `Ownership humanPlayer`, elapsed `Duration time`, `MatchPhase phase`; make T020 pass
+- [x] T027a [P] Write failing unit tests for `GameMapFixture` in `test/domain/entities/game_map_fixture_test.dart`: fixture produces a valid `GameMap` with 4–8 nodes; at least 2 are `CastleNode`; all nodes reachable via road edges; player castle and AI castle have distinct `Ownership` values
+- [x] T027b Implement `lib/domain/entities/game_map_fixture.dart` — hardcoded fixed match map: 6 nodes (2 castles + 4 road junctions), road edges with lengths, player start node and AI start node designated; `GameMap build()` factory; make T027a pass
+- [x] T027c [P] Write failing unit tests for `CheckCollisions` use case in `test/domain/use_cases/check_collisions_test.dart`: opposing Companies on same road segment returns FR-014 trigger; Company arriving at enemy castle node returns FR-015 trigger; friendly Companies on same node returns no trigger; empty map returns no triggers
+- [x] T027d [P] Write failing unit tests for `TickMatch` use case in `test/domain/use_cases/tick_match_test.dart`: single tick applies growth to all castles; positions all Companies forward; calls `CheckCollisions`; calls `AiController`; calls `VictoryChecker`; returns a `TickResult` with updated castles, companies, battle triggers, and optional `MatchOutcome`
+- [x] T027e Implement `lib/domain/use_cases/check_collisions.dart` — accepts current `GameMap`, list of all Companies; returns `List<BattleTrigger>` for FR-014 (road) and FR-015 (castle arrival) conditions; pure Dart, zero state/Flutter imports; make T027c pass
+- [x] T027f Implement `lib/domain/use_cases/tick_match.dart` — orchestrates: `TickCastleGrowth` for all castles → `MoveCompany` position advance for all Companies → `CheckCollisions` → `AiController.decide(MatchState)` → `VictoryChecker.check`; returns immutable `TickResult`; pure Dart; make T027d pass
+
+**Checkpoint**: All T008–T027f tests pass; `flutter analyze` clean; domain entities fully exercised at unit-test level.
+
+---
+
+## Phase 3: User Story 1 — Launch a Match and Control the Map (Priority: P1) 🎯 MVP
+
+**Goal**: Player can launch a match, see a medieval map with two castles, deploy a Company, and watch it march along a road.
+
+**Independent Test**: Launch app → tap "New Game" → tap castle → deploy 1 Company of any composition → tap a road node → Company marker moves. No crash.
+
+### Tests for US1 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T028 [P] [US1] Write failing unit tests for `MovementRules` in `test/domain/rules/movement_rules_test.dart`: `derivedSpeed` for a Company of Warriors (speed 6) + Catapults (speed 3) returns 3 (the Catapult minimum, not Warrior speed); road-only path validation rejects off-road targets; movement position advances correctly per tick
+- [x] T029 [P] [US1] Write failing unit tests for `DeployCompany` use case in `test/domain/use_cases/deploy_company_test.dart`: removes units from garrison, places Company adjacent to castle on map, rejects deployment exceeding 50 soldiers (FR-008), rejects deployment when garrison lacks sufficient units
+- [x] T030 [P] [US1] Write failing unit tests for `MoveCompany` use case in `test/domain/use_cases/move_company_test.dart`: assigns destination, validates road path, position increments per tick by `movementSpeed`, Company arrives at destination node
+- [x] T031 [P] [US1] Write failing widget test for `MapScreen` in `test/widget/map_screen_test.dart`: map loads with ≥ 2 castle nodes visible, Company marker appears after deploy action, tapping a node sends movement intent to notifier
+- [x] T032 [P] [US1] Write failing widget test for `MainMenuScreen` in `test/widget/main_menu_screen_test.dart`: "New Game" button is present and tappable, routes to `MapScreen`
+
+### Implementation for US1
+
+- [x] T033 [US1] Implement `lib/domain/rules/movement_rules.dart` — `int derivedSpeed(Company c)` returns `min` over roles present; `bool isValidPath(GameMap map, MapNode from, MapNode to)` road-only check; make T028 pass
+- [x] T034 [US1] Implement `lib/domain/use_cases/deploy_company.dart` — validate garrison has enough units, validate total ≤ 50, remove from `Castle.garrison`, return new `Company` placed at castle's adjacent start node; make T029 pass
+- [x] T035 [US1] Implement `lib/domain/use_cases/move_company.dart` — accept `Company`, `MapNode destination`, `GameMap`; validate road path; return updated `Company` with position advanced by `movementSpeed` per tick; make T030 pass
+- [x] T036 [US1] Implement `lib/state/match_notifier.dart` — `MatchNotifier extends AsyncNotifier<MatchState>`; `newGame()` initialises map from `GameMapFixture` + garrisons; 10-second periodic tick calls `TickMatch` use case and applies `TickResult` to state; dispatches battle triggers to `BattleNotifier`; dispatches `MatchOutcome` to navigate to Victory/Defeat screen; contains NO game-rule logic
+- [x] T037 [US1] Implement `lib/state/company_notifier.dart` — `CompanyNotifier extends AsyncNotifier<List<CompanyState>>`; `deployCompany(...)`, `setDestination(...)`, tick-driven position update via `MoveCompany` use case; `selectedCompanyId` field for two-step tap-to-select/tap-to-assign-destination UX (FR-011); `selectCompany(String id)` and `clearSelection()` actions
+- [x] T037a [US1] Write failing widget test in `test/widget/map_screen_test.dart` (extend T031) verifying two-step selection UX: first tap on a Company marker sets `selectedCompanyId`; second tap on a destination node calls `setDestination(selectedCompanyId, node)` and clears selection; tapping a node without a selected Company does not trigger movement
+- [x] T038 [US1] Implement `lib/state/castle_notifier.dart` (garrison/ownership only — growth in US3) — `CastleNotifier extends AsyncNotifier<List<CastleState>>`; exposes garrison counts and ownership per castle id
+- [x] T039 [P] [US1] Implement `lib/ui/screens/main_menu_screen.dart` — `ConsumerWidget`; "New Game" `ElevatedButton` navigates to `MapScreen`; no game logic; make T032 pass
+- [x] T040 [US1] Implement `lib/ui/widgets/map_node_widget.dart` — `const` constructor; `RepaintBoundary` wrapper; renders castle icon or road-junction dot; tappable; dispatches node-tap event upward
+- [x] T041 [US1] Implement `lib/ui/widgets/company_marker.dart` — `AnimatedPositioned` for smooth movement; `RepaintBoundary`; displays unit count badge; tappable for detail
+- [x] T042 [US1] Implement `lib/ui/screens/map_screen.dart` — `ConsumerWidget`; `InteractiveViewer` for scroll/zoom; renders `MapNodeWidget` for each node; `CompanyMarker` for each in-transit Company; wires deploy and move intent to notifiers; make T031 pass
+- [x] T043 [P] [US1] Write failing golden test in `test/golden/map_rendering_test.dart`: map renders with two castle nodes and one Company marker matching golden baseline; verify `RepaintBoundary` boundaries
+- [x] T044 [US1] Run golden test (T043) — capture baseline screenshot; confirm test passes
+
+**Checkpoint**: User Story 1 independently testable — deploy + march works end-to-end. `flutter test test/domain/rules/movement_rules_test.dart test/domain/use_cases/deploy_company_test.dart test/widget/map_screen_test.dart` all green.
+
+---
+
+## Phase 4: User Story 2 — Battle Resolution Between Opposing Forces (Priority: P2)
+
+**Goal**: When opposing Companies meet, the Battle Detail Screen opens, rounds resolve with correct damage and terrain bonuses, and a win/loss summary is shown.
+
+**Independent Test**: Guide a player Company into the AI's Company on a road → Battle Detail Screen opens → battle resolves → winner declared; survivor counts match unit balance sheet.
+
+### Tests for US2 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T045 [P] [US2] Write failing unit tests for `BattleEngine` in `test/domain/rules/battle_engine_test.dart`: simultaneous-round resolution; melee units advance and target nearest melee first; ranged units hold position and fire nearest enemy within their `range` field; damage applied end-of-round; units at 0 HP removed before next round; mutual-destruction draw produces `BattleOutcome.draw` (no ownership transfer); all five unit-role damage values exercised
+- [x] T046 [P] [US2] Write failing unit tests for `TerrainBonus` in `test/domain/rules/terrain_bonus_test.dart`: Knight road 2× DMG (80 total); Archer High Ground 2× + 75% DR when no Warriors present; High Ground negated when Warriors present; Catapult Wall Breaker removes Archer bonus flag in `Battle` — verified by asserting Archer High Ground is absent in round 2 and all subsequent rounds even if no Warriors are present
+- [x] T046a [P] [US2] Write failing unit tests for `ResolveBattle` draw outcome in `test/domain/use_cases/resolve_battle_test.dart` (add to T047 file): when both sides reach 0 HP simultaneously, `BattleOutcome.draw` is returned; no castle ownership transfer occurs on draw; `BattleScreen` receives `draw` outcome and displays a draw result screen
+- [x] T047 [P] [US2] Write failing unit tests for `ResolveBattle` use case in `test/domain/use_cases/resolve_battle_test.dart`: returns survivors and `BattleOutcome`; reinforcement waves join mid-battle (FR-021); castle-ownership transfer on defender elimination (FR-022a); `BattleOutcome.draw` prevents ownership transfer (see T046a)
+- [x] T048 [P] [US2] Write failing widget test for `BattleScreen` in `test/widget/battle_screen_test.dart`: melee units appear at front, ranged + Peasants at rear; HP bars update per round; victory/defeat/draw summary dismisses to map
+- [x] T049 [P] [US2] Write failing widget test for `VictoryScreen`/`DefeatScreen` in `test/widget/victory_defeat_screen_test.dart` (one file covers both screens): summary stats shown; dismiss button routes back to `MapScreen`; both screen types tested separately within the file
+
+### Implementation for US2
+
+- [x] T050 [US2] Implement `lib/domain/rules/terrain_bonus.dart` — `int applyBonus(UnitRole role, BattleContext ctx)` returning modified damage; `bool highGroundActive(List<Company> attackers)` (false if Warriors present); `void applyWallBreaker(Battle battle)` removes Archer bonus flag; make T046 pass
+- [x] T051 [US2] Implement `lib/domain/rules/battle_engine.dart` — `BattleRoundResult resolveRound(Battle battle)`: melee units advance toward nearest enemy melee (FR-016b); ranged units hold + fire nearest enemy in range; apply `TerrainBonus`; compute simultaneous damage; remove 0-HP units; append round to log; make T045 pass
+- [x] T052 [US2] Implement `lib/domain/use_cases/resolve_battle.dart` — orchestrate `BattleEngine.resolveRound` until one side empty; handle `BattleOutcome.draw` (both sides eliminated simultaneously — no ownership transfer); handle reinforcement waves (FR-021); transfer castle ownership on defender elimination only when outcome is not draw; return `BattleOutcome` + survivors; make T047 pass
+- [x] T053 [US2] Implement `lib/state/battle_notifier.dart` — `BattleNotifier extends AsyncNotifier<BattleState>`; `startBattle(...)` initialises battle; `advanceRound()` calls `ResolveBattle`; streams round log; exposes `BattleOutcome?`
+- [x] T054 [P] [US2] Implement `lib/ui/widgets/battle_side_view.dart` — side-view 2D layout: melee at front advancing, ranged + Peasants at rear; `AnimatedPositioned` melee units; HP bar per unit; `const` where possible; make T048 pass
+- [x] T055 [US2] Implement `lib/ui/screens/battle_screen.dart` — `ConsumerWidget`; renders `BattleSideView`; watches `BattleNotifier`; shows round log; transitions to victory/defeat summary on `BattleOutcome` non-null; shows draw result screen on `BattleOutcome.draw` with "Return to Map" (no winner declared)
+- [x] T056 [P] [US2] Implement `lib/ui/screens/victory_screen.dart` — summary stats (survivors, rounds); "Return to Map" button navigates back to `MapScreen`; make T049 pass
+- [x] T057 [P] [US2] Implement `lib/ui/screens/defeat_screen.dart` — same structure as `VictoryScreen`; different copy; make T049 pass
+- [x] T058 [US2] Wire battle triggers into `lib/state/match_notifier.dart` from `TickMatch.tickResult.battleTriggers` — handle FR-014 trigger (opposing Companies on same road segment) AND FR-015 trigger (Company arrives at enemy castle node); both transition `MatchPhase` to `inBattle` and push `BattleScreen`; do NOT re-detect collisions in the notifier — use triggers emitted by `CheckCollisions` use case
+- [x] T058a [P] [US2] Write failing unit tests for Company zero-survivor cleanup in `test/domain/use_cases/resolve_battle_test.dart` (extend T047 file): when a Company has zero survivors after `ResolveBattle`, it is removed from the companies list in `TickResult`; its marker must not appear on the map
+- [x] T058b [US2] Implement Company cleanup in `lib/state/company_notifier.dart` — after `MatchNotifier` applies a `TickResult`, remove any `CompanyState` entries whose `survivorCount == 0`; make T058a pass (covers edge case: last unit killed mid-march)
+- [x] T058c [P] [US2] Write failing unit tests for reinforcement wave routing in `test/domain/use_cases/move_company_test.dart` (extend T030 file): when a Company's destination node has an active battle, `MoveCompany` returns a `ReinforcementArrival` signal instead of normal arrival; `ResolveBattle` enqueues the Company as a reinforcement wave on next round
+- [x] T058d [US2] Update `lib/domain/use_cases/move_company.dart` — detect if destination `MapNode` has an active `Battle`; if so, return `ReinforcementArrival` instead of `CompanyArrived`; `TickMatch` routes `ReinforcementArrival` to `ResolveBattle.addReinforcement(company)`; make T058c pass (covers FR-021)
+- [x] T058e [P] [US2] Write failing widget test in `test/widget/map_screen_test.dart` (extend T031 file): after a castle's ownership transfers, `MapNodeWidget` for that castle re-renders with the new owner's colour in the same frame; verify using `RepaintBoundary` key and widget state inspection (covers FR-022a UI side)
+- [x] T059 [P] [US2] Write failing golden test in `test/golden/battle_side_view_test.dart`: battle layout with melee front / ranged rear matches golden baseline
+- [x] T060 [US2] Run golden test (T059) — capture baseline; confirm test passes
+
+**Checkpoint**: User Story 2 independently testable. `flutter test test/domain/rules/battle_engine_test.dart test/domain/rules/terrain_bonus_test.dart test/widget/battle_screen_test.dart` all green.
+
+---
+
+## Phase 5: User Story 3 — Castle Growth and Deployment Management (Priority: P3)
+
+**Goal**: Castles grow units automatically over time; player can open the castle screen and deploy a custom-composition Company; growth halts at Castle Cap.
+
+**Independent Test**: Observe castle unit counts rising every 10 s without player input; open deployment panel; deploy a hand-picked composition; verify garrison decremented by exactly those amounts.
+
+### Tests for US3 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T061 [P] [US3] Write failing unit tests for `GrowthEngine` in `test/domain/rules/growth_engine_test.dart`: each role grows independently per tick — a role-slot at 50 halts only that role's growth while other roles in the same garrison continue; base tick adds 1 unit per role every 10 s; Peasant multiplier stacks (+5% per Peasant, FR-006); total Castle Cap (250 × multiplier) halts all growth when reached; growth resumes after units are deployed
+- [x] T062 [P] [US3] Write failing unit tests for `TickCastleGrowth` use case in `test/domain/use_cases/tick_castle_growth_test.dart`: single tick produces correct counts; cap enforcement at Company and castle levels; Peasant bonus computed before cap check
+- [x] T063 [P] [US3] Extend `test/domain/use_cases/deploy_company_test.dart` (created in T029) with edge-case tests: exceeding 50 blocked with error (FR-008); deploying exactly 50 accepted; deploying 0 of a role is ignored, not blocked; garrison flat-pool correctly decremented by exact role amounts
+- [x] T064 [P] [US3] Write failing widget test for `CastleScreen` in `test/widget/castle_screen_test.dart`: displays live garrison counts; `DeploymentPanel` rejects total > 50; deploying valid composition updates CompanyNotifier; Peasant bonus and cap values displayed correctly
+
+### Implementation for US3
+
+- [x] T065 [US3] Implement `lib/domain/rules/growth_engine.dart` — `CastleGrowthResult tick(Castle castle)`: compute effective rate (1 × multiplier per role); apply per-Company 50 cap; apply Castle Cap; return updated `Castle`; make T061 pass
+- [x] T066 [US3] Implement `lib/domain/use_cases/tick_castle_growth.dart` — wrap `GrowthEngine.tick`; accepts `Castle`, returns `Castle`; make T062 pass
+- [x] T067 [US3] Verify `TickMatch` use case (T027f) already calls `TickCastleGrowth` for all castles on each tick — write integration-level test in `test/domain/use_cases/tick_match_test.dart` (extend T027d file) asserting castle garrison counts increase after one tick when below cap
+- [x] T068 [US3] Update `lib/state/castle_notifier.dart` — add `tickGrowth()` action wired to `TickCastleGrowth`; expose `effectiveCap` and `growthRateMultiplier` to UI
+- [x] T069 [P] [US3] Implement `lib/ui/widgets/deployment_panel.dart` — per-role integer steppers (± buttons); running total badge; "Deploy" button disabled when total > 50 or garrison insufficient; dispatches `deployCompany(...)` on confirm; make T064 pass
+- [x] T070 [US3] Implement `lib/ui/screens/castle_screen.dart` — `ConsumerWidget`; watches `CastleNotifier` for live garrison; shows Castle Cap, growth rate, Peasant bonus; embeds `DeploymentPanel`; make T064 pass
+
+**Checkpoint**: User Story 3 independently testable. `flutter test test/domain/rules/growth_engine_test.dart test/widget/castle_screen_test.dart` all green.
+
+---
+
+## Phase 6: User Story 4 — Company Merging and Splitting on the Map (Priority: P4)
+
+**Goal**: Two friendly Companies on the same node can be merged (with overflow handling); a single Company can be split by role using a slider.
+
+**Independent Test**: Send two Companies to same node → merge → confirm combined count; then split by role → verify two Companies with correct compositions sum to original.
+
+### Tests for US4 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T071 [P] [US4] Write failing unit tests for `MergeSplitRules` in `test/domain/rules/merge_split_test.dart`: merge ≤ 50 produces single Company; merge > 50 produces primary Company of 50 + overflow Company with remainder; split produces two Companies summing to original; split with zero-count role rejected
+- [x] T072 [P] [US4] Write failing unit tests for `MergeCompanies` use case in `test/domain/use_cases/merge_companies_test.dart`: happy path ≤ 50; overflow ≥ 50 (SC-005); both Companies on same node required; result Companies placed on same node
+- [x] T073 [P] [US4] Write failing unit tests for `SplitCompany` use case in `test/domain/use_cases/split_company_test.dart`: output counts sum to original; new Company placed on same node; role selection validated against available composition
+- [x] T074 [P] [US4] Write failing widget test for `SplitSlider` widget in `test/widget/split_slider_test.dart`: live preview updates as slider moves; "Confirm Split" dispatches correct split action; original minus split count shown correctly
+
+### Implementation for US4
+
+- [x] T075 [US4] Implement `lib/domain/rules/merge_split_rules.dart` — `MergeResult merge(Company a, Company b)` returning primary + optional overflow; `SplitResult split(Company c, Map<UnitRole, int> toSplit)` with sum-invariant check; make T071 pass
+- [x] T076 [US4] Implement `lib/domain/use_cases/merge_companies.dart` — validate same-node, call `MergeSplitRules.merge`, update map state; make T072 pass
+- [x] T077 [US4] Implement `lib/domain/use_cases/split_company.dart` — validate composition, call `MergeSplitRules.split`, place both Companies on node; make T073 pass
+- [x] T078 [US4] Update `lib/state/company_notifier.dart` — add `mergeCompanies(String idA, String idB)` and `splitCompany(String id, Map<UnitRole, int> splitMap)` actions wired to respective use cases
+- [x] T079 [US4] Implement `lib/ui/widgets/split_slider.dart` — per-role sliders bounded by current composition; live preview of resulting Company A and Company B counts; "Confirm Split" button; make T074 pass
+- [x] T080 [US4] Update `lib/ui/screens/map_screen.dart` — show merge prompt when two friendly Companies are on the same node; open split-slider sheet when a Company is long-pressed; dispatch actions to `CompanyNotifier`
+
+**Checkpoint**: User Story 4 independently testable. `flutter test test/domain/rules/merge_split_test.dart test/widget/split_slider_test.dart` all green.
+
+---
+
+## Phase 7: User Story 5 — AI Opponent Plays Autonomously (Priority: P5)
+
+**Goal**: The AI deploys at least one Company within 30 seconds of match start, marches toward a player castle or unoccupied castle, and engages in battle when Companies meet.
+
+**Independent Test**: Start a match and take no action for 60 seconds — AI has deployed ≥ 1 Company and moved it toward an objective.
+
+### Tests for US5 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T081 [P] [US5] Write failing unit tests for `AiController` in `test/domain/rules/ai_controller_test.dart` (pure Dart — this is a domain rules class, not a state class): `decide(MatchState)` returns a `deploy` action with valid composition when garrison ≥ 10 units and within 30 s game-time; `decide(MatchState)` returns a `move` action targeting the nearest non-AI castle; returns `noAction` when garrison is empty
+- [x] T082 [P] [US5] Write failing integration test in `test/integration/ai_opponent_test.dart`: start match with `MatchNotifier` in test harness; advance clock 30 s via `TickMatch`; assert AI has ≥ 1 Company on map; advance to 60 s; assert Company has moved toward a player castle
+- [x] T083 [P] [US5] Write failing widget test verifying `MapScreen` shows AI Company markers after 30-second tick without player interaction
+
+### Implementation for US5
+
+- [x] T084 [US5] Implement `lib/domain/rules/ai_controller.dart` — pure Dart class `AiController`; `AiAction decide(MatchState state)` returns one of: `DeployAction` (when garrison ≥ 10 units), `MoveAction` (march nearest Company toward nearest non-AI castle), `NoAction` (garrison empty or all Companies already moving); zero Flutter/state imports; make T081 pass
+- [x] T084a [US5] Implement `lib/state/ai_controller_notifier.dart` — thin Riverpod `Notifier` wrapper; calls `AiController.decide(matchState)` and dispatches resulting `AiAction` to `CompanyNotifier` or `CastleNotifier`; contains NO decision logic
+- [x] T085 [US5] Verify `TickMatch` use case (T027f) already calls `AiController.decide` after growth and movement steps — extend `test/domain/use_cases/tick_match_test.dart` to assert that when AI garrison ≥ 10 units, `TickResult` contains a deploy action for the AI; make T082 pass
+- [x] T086 [US5] Verify `MapScreen` reflects AI Company markers by running T083 widget test — fix any watch/rebuild issues in `lib/ui/screens/map_screen.dart`
+
+**Checkpoint**: User Story 5 independently testable. Start match, wait 30 s, AI acts. `flutter test test/domain/rules/ai_controller_test.dart test/integration/ai_opponent_test.dart` green.
+
+---
+
+## Phase 8: User Story 6 — Victory and Defeat Conditions (Priority: P6)
+
+**Goal**: Game correctly detects Total Conquest (all castles same ownership), shows Victory or Defeat screen, and returns player to main menu on dismiss.
+
+**Independent Test**: Use a test harness to set all castles to player ownership → victory screen appears. Set all to AI ownership → defeat screen appears.
+
+### Tests for US6 *(Red-Green-Refactor — write first, confirm FAILING)*
+
+- [x] T087 [P] [US6] Write failing unit tests for `VictoryChecker` in `test/domain/rules/victory_checker_test.dart`: all-player castles → `MatchOutcome.playerWins`; all-AI castles → `MatchOutcome.aiWins`; mixed → `null`; single-castle map edge case
+- [x] T088 [P] [US6] Write failing integration test in `test/integration/full_match_test.dart`: full match from launch to Total Conquest; verify `MatchPhase` transitions `setup → playing → ended`; verify correct `MatchOutcome` written
+
+### Implementation for US6
+
+- [x] T089 [US6] Implement `lib/domain/rules/victory_checker.dart` — `MatchOutcome? check(List<Castle> castles)`: returns `playerWins` if all `Ownership.player`, `aiWins` if all `Ownership.ai`, else `null`; make T087 pass. **Note**: also satisfies US5 Acceptance Scenario 4 ("AI captures all player castles → defeat screen") — that scenario is covered by the `aiWins` branch here.
+- [x] T090 [US6] Verify `TickMatch` use case (T027f) already calls `VictoryChecker.check` after each tick and includes the result in `TickResult.matchOutcome` — extend `test/domain/use_cases/tick_match_test.dart` to assert that when all castles are player-owned `TickResult.matchOutcome == MatchOutcome.playerWins`; `MatchNotifier` reads `TickResult.matchOutcome` and navigates to `VictoryScreen` or `DefeatScreen` accordingly; contains NO victory-check logic itself
+- [x] T091 [US6] Verify `VictoryScreen` and `DefeatScreen` dismiss-to-main-menu flow (already implemented in T056/T057) — run T049 widget tests; confirm they pass end-to-end
+
+**Checkpoint**: User Story 6 independently testable. Full match loop closable. `flutter test test/domain/rules/victory_checker_test.dart test/integration/full_match_test.dart` all green.
+
+---
+
+## Phase 9: Polish & Cross-Cutting Concerns
+
+**Purpose**: Persistence layer, settings, end-to-end integration, performance validation, and final CI gate.
+
+- [x] T092 [P] Implement `lib/data/drift/tables/matches_table.dart`, `companies_table.dart`, `castles_table.dart` — Drift `Table` classes matching domain entity fields
+- [x] T093 Implement `lib/data/drift/app_database.dart` — Drift `Database` root; register all three tables; generate code via `build_runner`
+- [x] T094 Implement `lib/data/drift/match_dao.dart` — CRUD for match state: `saveMatch`, `loadMatch`, `deleteMatch`; map domain `Match` ↔ Drift rows
+- [x] T095 [P] Implement `lib/data/settings_repository.dart` — `shared_preferences` wrapper; persist sound on/off, display brightness preference
+- [x] T096 Wire `MatchDao` into `lib/state/match_notifier.dart` — persist `MatchState` snapshot after each 10-second tick; restore on cold start
+- [x] T097 [P] Extend `test/integration/full_match_test.dart` (created in T088) with persistence round-trip assertions: save `MatchState` via `MatchDao`, cold-restart `MatchNotifier`, assert restored state matches saved state; also assert SC-006 end-to-end: launch → deploy → march → battle → total conquest with no crash and correct final `MatchOutcome`
+- [x] T098 [P] Profile game-loop tick in Flutter DevTools: confirm single tick ≤ 16 ms on Dart VM; document results in `specs/001-mvp-single-player/performance-notes.md`
+- [x] T099 [P] Profile `MapScreen` scroll/zoom in Flutter DevTools on a 4-node map: confirm 60 fps; verify no widget rebuilds for unchanged `MapNodeWidget` cells (RepaintBoundary validation)
+- [x] T100 Run `flutter analyze` — assert zero issues (treat warnings as errors per CI gate)
+- [x] T101 Run `flutter test` — assert all tests pass; capture final test-count report (354 tests, 0 failures)
+- [x] T102 [P] Update `README.md` with quickstart instructions: clone → `flutter pub get` → `flutter test` → `flutter run`
+- [x] T103 [P] Document playtest protocol in `specs/001-mvp-single-player/playtest-notes.md` — define SC-007 measurement criteria (how to record "first-time player completed match without guidance"); add first-run hint overlay or contextual tooltip to `lib/ui/screens/map_screen.dart` (e.g., "Tap a castle to deploy" hint visible only on first launch, stored via `SettingsRepository`)
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: No dependencies — start immediately.
+- **Foundational (Phase 2)**: Requires Phase 1 complete. **Blocks all user-story phases.** Now includes `GameMapFixture` (T027a/b), `CheckCollisions` (T027c/e), and `TickMatch` (T027d/f) use cases.
+- **US1 Phase 3**: Requires Phase 2 complete. No other story dependency. Now includes Company selection state (T037/T037a).
+- **US2 Phase 4**: Requires Phase 2 complete. Integrates with Phase 3 (`MatchNotifier`, map triggers from `TickMatch`) but is independently testable at the domain + widget level. Now includes draw outcome (T046a), Company cleanup (T058a/b), reinforcement routing (T058c/d), and `MapNodeWidget` ownership re-render (T058e).
+- **US3 Phase 5**: Requires Phase 2 complete. Growth is now verified through `TickMatch` (T067) rather than direct notifier wiring.
+- **US4 Phase 6**: Requires Phase 2 complete. Extends `CompanyNotifier` from Phase 3.
+- **US5 Phase 7**: Requires Phases 3–5 complete. `AiController` is now a domain class (`lib/domain/rules/`); `AiControllerNotifier` is a thin state wrapper. `TickMatch` calls `AiController.decide` — verified by extending T027d tests.
+- **US6 Phase 8**: Requires Phases 3–5 complete. `VictoryChecker` is called inside `TickMatch` — verified by extending T027d tests. US5 AC-4 (AI wins) is satisfied by the `aiWins` branch in T089.
+- **Polish (Phase 9)**: Requires all user-story phases complete.
+
+### User Story Dependency Graph
+
+```
+Phase 1 (Setup)
+    └─► Phase 2 (Foundational — entities + TickMatch + CheckCollisions + GameMapFixture)
+            ├─► Phase 3 (US1 — Map + Deploy + Move + Company selection)
+            │       └─► Phase 4 (US2 — Battle + Draw + Cleanup + Reinforcement routing) ─┐
+            │       └─► Phase 5 (US3 — Growth)                                           ─┤─► Phase 7 (US5 — AI domain class)
+            │       └─► Phase 6 (US4 — Merge/Split)                                       │     └─► Phase 8 (US6 — Victory/Defeat)
+            │                                                                              │           └─► Phase 9 (Polish)
+            └──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Within Each Phase
+
+1. Write failing tests → confirm they fail → implement → confirm they pass → refactor.
+2. Models before services; services before state notifiers; notifiers before widgets.
+3. Golden tests captured after widget implementation.
+4. Commit after each completed task or logical group.
+
+---
+
+## Parallel Opportunities
+
+### Phase 2 — Foundational Entities (all [P] tasks can run concurrently)
+
+```
+T008  Write SoldierCount tests          ─┐
+T009  Write Ownership tests              ├─ all in parallel
+T010  Write UnitRole tests               │
+T011  Implement SoldierCount            ─┘ (after T008)
+T012  Implement Ownership                  (after T009)
+T013  Implement UnitRole                   (after T010)
+
+T014  Write Company tests               ─┐
+T015  Write Castle tests                 ├─ all in parallel (after T011-T013)
+T016  Write MapNode tests                │
+T017  Write RoadEdge tests               │
+T018  Write GameMap tests                │
+T019  Write Battle tests                 │
+T020  Write Match tests                 ─┘
+```
+
+### Phase 3 — US1 (models + tests [P] tasks can run concurrently)
+
+```
+T028  Write MovementRules tests         ─┐
+T029  Write DeployCompany tests          ├─ all in parallel
+T030  Write MoveCompany tests            │
+T031  Write MapScreen widget test        │
+T032  Write MainMenuScreen widget test  ─┘
+T033  Implement MovementRules              (after T028)
+T034  Implement DeployCompany              (after T029)
+T035  Implement MoveCompany                (after T030)
+T039  Implement MainMenuScreen          ─┐ (after T032)
+T040  Implement MapNodeWidget            ├─ in parallel
+T041  Implement CompanyMarker           ─┘
+```
+
+### Phase 4 — US2 (battle engine tests [P] can run concurrently)
+
+```
+T045  Write BattleEngine tests          ─┐
+T046  Write TerrainBonus tests           ├─ in parallel
+T047  Write ResolveBattle tests          │
+T048  Write BattleScreen tests           │
+T049  Write Victory/DefeatScreen tests  ─┘
+T054  Implement BattleSideView          ─┐ (after T048)
+T056  Implement VictoryScreen            ├─ in parallel
+T057  Implement DefeatScreen            ─┘ (after T049)
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (User Story 1 Only)
+
+1. Complete Phase 1: Setup.
+2. Complete Phase 2: Foundational (CRITICAL — blocks everything).
+3. Complete Phase 3: User Story 1.
+4. **STOP AND VALIDATE**: Deploy + march loop is end-to-end playable; no crashes.
+5. Demo the skeleton — a Company marches a road. This alone constitutes the MVP skeleton per spec.
+
+### Incremental Delivery
+
+| Step | Phases | What's Playable |
+|------|--------|-----------------|
+| 1 | 1–2 | Project runs; domain entities + `TickMatch` orchestrator + fixed map pass all unit tests |
+| 2 | 3 | Deploy a Company and march it on a map with two-step selection UX (P1 MVP) |
+| 3 | 4 | March into enemy Company → battle resolves with draw/win handling; Company cleanup; reinforcement waves |
+| 4 | 5 | Castles grow independently per role; custom composition deployment |
+| 5 | 6 | Merge/split Companies mid-game |
+| 6 | 7 | AI acts autonomously via domain `AiController`; true single-player game |
+| 7 | 8 | Victory/defeat/AI-wins screens; complete match session |
+| 8 | 9 | Persistence, playtest protocol, performance sign-off, CI green |
+
+### Parallel Team Strategy (if multiple developers)
+
+- **Developer A**: Phase 3 (US1 map + move + deploy)
+- **Developer B**: Phase 4 (US2 battle engine) — can build domain layer independently of Flutter UI
+- **Developer C**: Phase 5 (US3 growth + deployment panel)
+- All three converge for Phase 7 (AI) once their foundational stories are complete.
+
+---
+
+## Notes
+
+- `[P]` tasks write to different files with no shared in-progress dependency — they are safe to parallelise.
+- `[Story]` labels map directly to user stories in `spec.md` for full traceability.
+- All domain tasks follow Red-Green-Refactor; do **not** write implementation before the failing test exists.
+- Stop at each **Checkpoint** to validate the story's independent test criteria before advancing.
+- No `[TODO]` tokens may be left open in implementation code without a `TODO(<FIELD>): explanation` annotation.
+- Commit convention: `feat(domain): ...`, `test(rules): ...`, `feat(ui): ...`, etc. per constitution.
+- `flutter analyze` must remain at zero issues after every committed task.
+- **Constitution compliance**: `AiController` lives in `lib/domain/rules/` (pure Dart); `lib/state/ai_controller_notifier.dart` is a thin wrapper only. `MatchNotifier` delegates all rule evaluation to `TickMatch` use case. No game-rule logic in the state layer.
+- **Garrison model**: `Castle.garrison` is a flat `Map<UnitRole, int>` pool. The per-Company 50-cap is enforced by `GrowthEngine` per role-slot, not by a list of Company objects inside the castle.
+- **Firing range**: Archer range = 3, Catapult range = 5 (battle-field distance units). Melee roles (Peasant, Warrior, Knight) range = 1. Defined as a const field on `UnitRole`.
