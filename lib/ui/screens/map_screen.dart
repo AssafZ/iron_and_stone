@@ -24,18 +24,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Pixel offsets for company markers sharing a node.
 ///
 /// Index = slot number (arrival order, 0-based).
-/// Slot 0 = centre (no offset); slots 1–4 = cardinal neighbours at Δ20 px;
-/// slots 5+ = diagonal spiral continuation at Δ20 increments.
+/// Slot 0 = centre (no offset); slots 1+ are positioned at a radius of
+/// [_kSlotRadius] px so that every 44 × 44 pt tap target is fully
+/// non-overlapping even at canvas scale 1.0.
+///
+/// [_kSlotRadius] must be ≥ 44 px (one full tap-target width) so adjacent
+/// markers never overlap. Using 52 px gives a comfortable gap on all densities.
+const double _kSlotRadius = 52.0;
+
 const List<(double, double)> _kSlotOffsets = [
-  (0.0, 0.0),      // slot 0 — centre
-  (20.0, 0.0),     // slot 1 — right
-  (-20.0, 0.0),    // slot 2 — left
-  (0.0, -20.0),    // slot 3 — above
-  (0.0, 20.0),     // slot 4 — below
-  (-20.0, -20.0),  // slot 5
-  (20.0, -20.0),   // slot 6
-  (-20.0, 20.0),   // slot 7
-  (20.0, 20.0),    // slot 8
+  (0.0, 0.0),                        // slot 0 — centre
+  (_kSlotRadius, 0.0),               // slot 1 — right
+  (-_kSlotRadius, 0.0),              // slot 2 — left
+  (0.0, -_kSlotRadius),              // slot 3 — above
+  (0.0, _kSlotRadius),               // slot 4 — below
+  (-_kSlotRadius, -_kSlotRadius),    // slot 5 — top-left
+  (_kSlotRadius, -_kSlotRadius),     // slot 6 — top-right
+  (-_kSlotRadius, _kSlotRadius),     // slot 7 — bottom-left
+  (_kSlotRadius, _kSlotRadius),      // slot 8 — bottom-right
 ];
 
 /// Returns the pixel offset `(dx, dy)` for [company] given the current
@@ -499,10 +505,147 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
+    // No selection: check for multiple stationary player companies at this
+    // road junction — if so, show a disambiguation panel (FR-001, User Story 1).
+    if (node is RoadJunctionNode) {
+      final stationaryAtNode = matchState.companies
+          .where((co) =>
+              co.currentNode.id == node.id &&
+              (co.destination == null || co.destination!.id == co.currentNode.id) &&
+              co.ownership == Ownership.player)
+          .toList();
+      if (stationaryAtNode.length >= 2) {
+        _showNodeDisambiguationSheet(context, node, stationaryAtNode, companyState);
+        return;
+      }
+      // Single or no player company — direct tap selects it (handled by marker tap).
+      return;
+    }
+
     // No selection: if tapping a castle, open the castle sheet.
     if (node is CastleNode) {
       _showCastleSheet(context, node, matchState);
     }
+  }
+
+  /// Bottom sheet shown when a road junction has multiple stationary player
+  /// companies and the user taps the node area (FR-001, User Story 1).
+  ///
+  /// Lists all companies at the node so the player can select any one of them,
+  /// even if the offset markers are hard to tap individually at a given zoom level.
+  void _showNodeDisambiguationSheet(
+    BuildContext context,
+    RoadJunctionNode node,
+    List<CompanyOnMap> companies,
+    CompanyListState companyState,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.place, color: AppTheme.ironDark, size: 24),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${companies.length} Companies at this junction',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.ironDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a company to manage it:',
+                style: TextStyle(color: AppTheme.stone, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...companies.map((co) {
+                final isSelected = co.id == companyState.selectedCompanyId;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    key: ValueKey('disambiguation_${co.id}'),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _onCompanyTap(context, co, companyState);
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.gold.withAlpha(60)
+                            : AppTheme.ironDark.withAlpha(10),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.gold : AppTheme.stone.withAlpha(80),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppTheme.bloodRed,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.shield,
+                                color: Colors.white, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Company',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.ironDark,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '${co.company.totalSoldiers.value} soldiers',
+                                  style: const TextStyle(
+                                    color: AppTheme.stone,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle,
+                                color: AppTheme.gold, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Bottom sheet shown when a castle node is tapped with no company selected.

@@ -46,16 +46,18 @@ CompanyOnMap _makeCompany({
 // ---------------------------------------------------------------------------
 
 /// The slot-offset table (mirrors _kSlotOffsets from map_screen.dart).
+/// Radius must be ≥ 44 px so adjacent 44 × 44 tap targets never overlap.
+const double _kSlotRadius = 52.0;
 const _kSlotOffsets = [
-  (0.0, 0.0),    // slot 0 — centre
-  (20.0, 0.0),   // slot 1 — right
-  (-20.0, 0.0),  // slot 2 — left
-  (0.0, -20.0),  // slot 3 — above
-  (0.0, 20.0),   // slot 4 — below
-  (-20.0, -20.0),
-  (20.0, -20.0),
-  (-20.0, 20.0),
-  (20.0, 20.0),
+  (0.0, 0.0),                      // slot 0 — centre
+  (_kSlotRadius, 0.0),             // slot 1 — right
+  (-_kSlotRadius, 0.0),            // slot 2 — left
+  (0.0, -_kSlotRadius),            // slot 3 — above
+  (0.0, _kSlotRadius),             // slot 4 — below
+  (-_kSlotRadius, -_kSlotRadius),  // slot 5
+  (_kSlotRadius, -_kSlotRadius),   // slot 6
+  (-_kSlotRadius, _kSlotRadius),   // slot 7
+  (_kSlotRadius, _kSlotRadius),    // slot 8
 ];
 
 (double, double) _offsetForCompany(
@@ -198,10 +200,11 @@ void main() {
       );
       await tester.pump();
 
-      // co_a is at slot 0 (centre, offset 0,0) → Positioned left=178, top=178.
-      // co_b is at slot 1 (right, offset +20,0) → Positioned left=198, top=178.
-      // The slots overlap from x=198..222.  Tap the LEFT edge of co_a's box
-      // (x≈183) which is exclusively in co_a's region.
+      // co_a is at slot 0 (centre, offset 0,0)  → Positioned left=178, top=178.
+      // co_b is at slot 1 (right, offset +52,0) → Positioned left=230, top=178.
+      // With 52 px spacing the boxes no longer overlap at all.
+      // Tap the LEFT edge of co_a's 44 px box (x≈183) which is exclusively
+      // in co_a's region and well clear of co_b (which starts at x=230).
       final posA = tester.getTopLeft(find.byKey(const ValueKey('positioned_co_a')));
       // Tap 5 px from the left edge of co_a's 44 px box — well outside co_b's range.
       await tester.tapAt(Offset(posA.dx + 5, posA.dy + 22));
@@ -240,9 +243,9 @@ void main() {
       );
       await tester.pump();
 
-      // co_b is at slot 1 (right, offset +20,0) → Positioned left=198, top=178.
-      // Tap the RIGHT edge of co_b's 44 px box (x≈238) which is exclusively
-      // in co_b's region and outside co_a's range (178..222).
+      // co_b is at slot 1 (right, offset +52,0) → Positioned left=230, top=178.
+      // Tap the RIGHT edge of co_b's 44 px box (x≈268) which is exclusively
+      // in co_b's region and completely outside co_a's range (178..222).
       final posB = tester.getTopLeft(find.byKey(const ValueKey('positioned_co_b')));
       await tester.tapAt(Offset(posB.dx + 38, posB.dy + 22));
       await tester.pump();
