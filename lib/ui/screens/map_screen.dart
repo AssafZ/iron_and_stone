@@ -60,6 +60,8 @@ Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
     final isStationary = co.destination == null ||
         co.destination!.id == co.currentNode.id;
     if (!isStationary) continue;
+    // Companies inside a castle are rendered at the castle centre (no offset).
+    if (co.currentNode is CastleNode) continue;
     map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
   }
   // Sort each node's list by id so order is stable across rebuilds.

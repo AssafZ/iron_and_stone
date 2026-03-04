@@ -8,6 +8,7 @@ import 'package:iron_and_stone/state/castle_notifier.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
+import 'package:iron_and_stone/ui/widgets/split_slider.dart';
 
 /// Screen showing a castle's stats and companies stationed here.
 ///
@@ -124,6 +125,10 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   /// Index into [widget.companies] of the currently highlighted "front" company.
   int _frontIndex = 0;
 
+  /// When non-null, we are in "merge mode": waiting for the user to pick a
+  /// second company to merge with the one at [_mergeSourceIndex].
+  int? _mergeSourceIndex;
+
   String _roleName(UnitRole role) {
     switch (role) {
       case UnitRole.peasant:
@@ -142,9 +147,89 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   bool _isStationary(CompanyOnMap co) =>
       co.destination == null || co.destination!.id == co.currentNode.id;
 
+  void _showMergePrompt(
+    BuildContext context,
+    CompanyOnMap a,
+    CompanyOnMap b,
+  ) {
+    final totalA = a.company.totalSoldiers.value;
+    final totalB = b.company.totalSoldiers.value;
+    final combined = totalA + totalB;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.parchment,
+        title: const Text(
+          'Merge Companies?',
+          style: TextStyle(color: AppTheme.ironDark),
+        ),
+        content: Text(
+          'Merge Company ($totalA soldiers) with Company ($totalB soldiers)?\n'
+          'Combined: $combined soldiers'
+          '${combined > 50 ? " → primary of 50 + overflow of ${combined - 50}" : ""}.',
+          style: const TextStyle(color: AppTheme.ironDark),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('castle_merge_cancel_button'),
+            onPressed: () {
+              setState(() => _mergeSourceIndex = null);
+              Navigator.of(ctx).pop();
+            },
+            child:
+                const Text('Cancel', style: TextStyle(color: AppTheme.stone)),
+          ),
+          ElevatedButton(
+            key: const ValueKey('castle_merge_confirm_button'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.bloodRed,
+              foregroundColor: AppTheme.parchment,
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              setState(() => _mergeSourceIndex = null);
+              ref
+                  .read(companyNotifierProvider.notifier)
+                  .mergeCompanies(a.id, b.id);
+            },
+            child: const Text('Merge'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSplitSheet(BuildContext context, CompanyOnMap co) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: SplitSlider(
+          key: ValueKey('castle_split_slider_${co.id}'),
+          company: co,
+          onConfirm: (splitMap) {
+            Navigator.of(ctx).pop();
+            ref
+                .read(companyNotifierProvider.notifier)
+                .splitCompany(co.id, splitMap);
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final companies = widget.companies;
+    final mergeMode = _mergeSourceIndex != null;
 
     return Card(
       key: const ValueKey('castle_roster_card'),
@@ -159,107 +244,229 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
               children: [
                 const Icon(Icons.shield, color: AppTheme.ironDark, size: 18),
                 const SizedBox(width: 8),
-                Text(
-                  'Companies here (${companies.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.ironDark,
+                Expanded(
+                  child: Text(
+                    mergeMode
+                        ? 'Select a company to merge with…'
+                        : 'Companies here (${companies.length})',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: mergeMode ? AppTheme.bloodRed : AppTheme.ironDark,
+                    ),
                   ),
                 ),
+                if (mergeMode)
+                  TextButton(
+                    onPressed: () => setState(() => _mergeSourceIndex = null),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: AppTheme.stone),
+                    ),
+                  ),
               ],
             ),
+            if (mergeMode)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Tap another company to merge it with the selected one.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.stone,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
             const Divider(),
             ...companies.asMap().entries.map((entry) {
               final index = entry.key;
               final co = entry.value;
-              final isFront = index == _frontIndex;
+              final isSource = index == _mergeSourceIndex;
+              final isFront = !mergeMode && index == _frontIndex;
               final stationary = _isStationary(co);
               final statusLabel = stationary ? 'Garrisoned' : 'Defending';
               final ownerColor = co.ownership == Ownership.player
                   ? AppTheme.bloodRed
                   : AppTheme.midnightBlue;
               final total = co.company.totalSoldiers.value;
+              final isPlayerOwned = co.ownership == Ownership.player;
+
+              // In merge mode, grey out the source and non-stationary companies.
+              final isInteractable =
+                  isPlayerOwned && (stationary || mergeMode && !isSource);
+              final dimmed = mergeMode && isSource;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: InkWell(
                   key: ValueKey('roster_row_${co.id}'),
                   onTap: () {
-                    setState(() => _frontIndex = index);
-                    ref
-                        .read(companyNotifierProvider.notifier)
-                        .selectCompany(co.id);
+                    if (!isPlayerOwned) return;
+                    if (mergeMode) {
+                      if (isSource) return; // can't merge with self
+                      final sourceIndex = _mergeSourceIndex!;
+                      setState(() => _mergeSourceIndex = null);
+                      _showMergePrompt(
+                          context, companies[sourceIndex], co);
+                    } else {
+                      setState(() => _frontIndex = index);
+                      ref
+                          .read(companyNotifierProvider.notifier)
+                          .selectCompany(co.id);
+                    }
                   },
+                  onLongPress: (isPlayerOwned && stationary && !mergeMode)
+                      ? () => _showSplitSheet(context, co)
+                      : null,
                   borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: isFront
-                            ? const Color(0xFFFFD700) // gold highlight
-                            : ownerColor.withAlpha(80),
-                        width: isFront ? 2.5 : 1.0,
+                  child: Opacity(
+                    opacity: dimmed ? 0.45 : 1.0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isSource
+                              ? AppTheme.bloodRed
+                              : isFront
+                                  ? const Color(0xFFFFD700)
+                                  : ownerColor.withAlpha(80),
+                          width: (isSource || isFront) ? 2.5 : 1.0,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: isSource
+                            ? AppTheme.bloodRed.withAlpha(30)
+                            : isFront
+                                ? const Color(0xFFFFF8DC).withAlpha(180)
+                                : null,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      color: isFront
-                          ? const Color(0xFFFFF8DC).withAlpha(180)
-                          : null,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: ownerColor,
-                            radius: 16,
-                            child: Text(
-                              '$total',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: ownerColor,
+                              radius: 16,
+                              child: Text(
+                                '$total',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '$total soldiers',
-                                  style: const TextStyle(
-                                    color: AppTheme.ironDark,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$total soldiers',
+                                    style: const TextStyle(
+                                      color: AppTheme.ironDark,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  statusLabel,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.stone,
+                                  Text(
+                                    statusLabel,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.stone,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          if (isFront)
-                            const Icon(
-                              Icons.star,
-                              color: Color(0xFFFFD700),
-                              size: 18,
-                            ),
-                        ],
+                            if (isSource)
+                              const Icon(
+                                Icons.compare_arrows,
+                                color: AppTheme.bloodRed,
+                                size: 18,
+                              )
+                            else if (isFront)
+                              const Icon(
+                                Icons.star,
+                                color: Color(0xFFFFD700),
+                                size: 18,
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               );
             }),
+            // Action buttons — only shown when there are ≥1 player-owned stationary companies.
+            if (!mergeMode &&
+                companies
+                    .where((co) =>
+                        co.ownership == Ownership.player && _isStationary(co))
+                    .length >=
+                    1) ...[
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (companies
+                          .where((co) =>
+                              co.ownership == Ownership.player &&
+                              _isStationary(co))
+                          .length >=
+                      2)
+                    TextButton.icon(
+                      key: const ValueKey('castle_merge_button'),
+                      icon: const Icon(Icons.compare_arrows, size: 16),
+                      label: const Text('Merge'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.ironDark,
+                      ),
+                      onPressed: () {
+                        // Enter merge mode: highlight the front company as source.
+                        final playerStationary = companies
+                            .asMap()
+                            .entries
+                            .where((e) =>
+                                e.value.ownership == Ownership.player &&
+                                _isStationary(e.value))
+                            .toList();
+                        // Default source = the currently highlighted front company
+                        // if it's a valid candidate, else first stationary player company.
+                        final frontCo = companies[_frontIndex];
+                        final frontIsCandidate =
+                            frontCo.ownership == Ownership.player &&
+                                _isStationary(frontCo);
+                        setState(() {
+                          _mergeSourceIndex = frontIsCandidate
+                              ? _frontIndex
+                              : playerStationary.first.key;
+                        });
+                      },
+                    ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    key: const ValueKey('castle_split_button'),
+                    icon: const Icon(Icons.call_split, size: 16),
+                    label: const Text('Split'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.ironDark,
+                    ),
+                    onPressed: () {
+                      // Split the currently highlighted front company (if eligible).
+                      final co = companies[_frontIndex];
+                      if (co.ownership == Ownership.player &&
+                          _isStationary(co)) {
+                        _showSplitSheet(context, co);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
