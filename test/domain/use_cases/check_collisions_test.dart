@@ -157,5 +157,286 @@ void main() {
         expect(triggers, isEmpty);
       });
     });
+
+    // -----------------------------------------------------------------------
+    // T049–T053: US4 — Friendly pass-through (Phase 6)
+    // -----------------------------------------------------------------------
+
+    group('T049: in-transit same-owner company at friendly-occupied node → no roadCollision', () {
+      test(
+        'player company in transit at node occupied only by stationary '
+        'player company → no roadCollision',
+        () {
+          // Stationary player company at the junction.
+          final stationary = _makeCompany(
+            id: 'p_stationary',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: null,
+          );
+          // In-transit player company passing through the same junction.
+          final inTransit = _makeCompany(
+            id: 'p_transit',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+
+          final triggers =
+              useCase.check(map: map, companies: [stationary, inTransit]);
+
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+            reason: 'Same-owner pass-through must not trigger a roadCollision',
+          );
+        },
+      );
+
+      test(
+        'two in-transit same-owner companies at same node → no roadCollision',
+        () {
+          final a = _makeCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+          final b = _makeCompany(
+            id: 'p2',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+
+          final triggers = useCase.check(map: map, companies: [a, b]);
+
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+          );
+        },
+      );
+    });
+
+    group('T050: in-transit enemy company at player-occupied node → roadCollision', () {
+      test(
+        'AI company in transit at node with stationary player company '
+        '→ roadCollision triggered',
+        () {
+          final playerStationary = _makeCompany(
+            id: 'p_stationary',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: null,
+          );
+          final aiTransit = _makeCompany(
+            id: 'ai_transit',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+            destination: _playerCastle,
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [playerStationary, aiTransit],
+          );
+
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isTrue,
+            reason:
+                'Enemy in-transit company at player node must trigger roadCollision',
+          );
+        },
+      );
+
+      test(
+        'AI company in transit at node with in-transit player company '
+        '→ roadCollision triggered',
+        () {
+          final playerTransit = _makeCompany(
+            id: 'p_transit',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+          final aiTransit = _makeCompany(
+            id: 'ai_transit',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+            destination: _playerCastle,
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [playerTransit, aiTransit],
+          );
+
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isTrue,
+            reason:
+                'Opposing in-transit companies on same node must trigger roadCollision',
+          );
+        },
+      );
+    });
+
+    group('T051: in-transit player company at enemy-occupied node → roadCollision', () {
+      test(
+        'player company in transit at node with stationary AI company '
+        '→ roadCollision triggered',
+        () {
+          final aiStationary = _makeCompany(
+            id: 'ai_stationary',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+            destination: null,
+          );
+          final playerTransit = _makeCompany(
+            id: 'p_transit',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [aiStationary, playerTransit],
+          );
+
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isTrue,
+            reason:
+                'Player in-transit company at enemy node must trigger roadCollision',
+          );
+        },
+      );
+    });
+
+    group('T052: friendly pass-through does NOT displace or affect stationary company', () {
+      test(
+        'stationary player company at node is unchanged when friendly '
+        'in-transit company passes through',
+        () {
+          final stationary = _makeCompany(
+            id: 'p_stationary',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: null,
+          );
+          final inTransit = _makeCompany(
+            id: 'p_transit',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+
+          // check() is pure — it only returns triggers, never modifies input.
+          // The test verifies there are no triggers that would indicate
+          // an erroneous merge/displacement of the stationary company.
+          final triggers =
+              useCase.check(map: map, companies: [stationary, inTransit]);
+
+          // No roadCollision — stationary company is not affected.
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+          );
+          // No castleAssault from a junction node.
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
+            isFalse,
+          );
+        },
+      );
+    });
+
+    group('T053: stationary classification — null destination, destination == currentNode, '
+        'destination ≠ currentNode', () {
+      test(
+        'company with null destination (stationary) sharing node only with '
+        'same-owner in-transit company → no roadCollision',
+        () {
+          // destination == null → stationary
+          final stationary = _makeCompany(
+            id: 'p_stat',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: null,
+          );
+          final transit = _makeCompany(
+            id: 'p_tran',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+          final triggers =
+              useCase.check(map: map, companies: [stationary, transit]);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+          );
+        },
+      );
+
+      test(
+        'company with destination == currentNode (treated as stationary) '
+        'sharing node only with same-owner in-transit company → no roadCollision',
+        () {
+          // destination == currentNode → classified as stationary
+          final stationaryAtNode = _makeCompany(
+            id: 'p_stat',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _junction,
+          );
+          final transit = _makeCompany(
+            id: 'p_tran',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+          final triggers = useCase.check(
+            map: map,
+            companies: [stationaryAtNode, transit],
+          );
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+          );
+        },
+      );
+
+      test(
+        'company with destination ≠ currentNode (in transit) sharing node '
+        'with enemy company → roadCollision regardless of transit state',
+        () {
+          // destination ≠ currentNode → in transit
+          final playerTransit = _makeCompany(
+            id: 'p_tran',
+            ownership: Ownership.player,
+            currentNode: _junction,
+            destination: _aiCastle,
+          );
+          final aiStationary = _makeCompany(
+            id: 'ai_stat',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+            destination: null,
+          );
+          final triggers = useCase.check(
+            map: map,
+            companies: [playerTransit, aiStationary],
+          );
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isTrue,
+          );
+        },
+      );
+    });
   });
 }

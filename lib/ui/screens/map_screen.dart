@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/data/settings_repository.dart';
-import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
@@ -16,6 +15,83 @@ import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
 import 'package:iron_and_stone/ui/widgets/split_slider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// ---------------------------------------------------------------------------
+// Slot offset table (FR-003)
+// ---------------------------------------------------------------------------
+
+/// Pixel offsets for company markers sharing a node.
+///
+/// Index = slot number (arrival order, 0-based).
+/// Slot 0 = centre (no offset); slots 1+ are positioned at a radius of
+/// [_kSlotRadius] px so that every 44 × 44 pt tap target is fully
+/// non-overlapping even at canvas scale 1.0.
+///
+/// [_kSlotRadius] must be ≥ half the tap-target width (22 px) so adjacent
+/// markers never overlap. Using 28 px gives clear visual separation while
+/// keeping the spread compact relative to the map scale.
+const double _kSlotRadius = 28.0;
+
+const List<(double, double)> _kSlotOffsets = [
+  (0.0, 0.0),                        // slot 0 — centre
+  (_kSlotRadius, 0.0),               // slot 1 — right
+  (-_kSlotRadius, 0.0),              // slot 2 — left
+  (0.0, -_kSlotRadius),              // slot 3 — above
+  (0.0, _kSlotRadius),               // slot 4 — below
+  (-_kSlotRadius, -_kSlotRadius),    // slot 5 — top-left
+  (_kSlotRadius, -_kSlotRadius),     // slot 6 — top-right
+  (-_kSlotRadius, _kSlotRadius),     // slot 7 — bottom-left
+  (_kSlotRadius, _kSlotRadius),      // slot 8 — bottom-right
+];
+
+/// Builds a node-occupancy map directly from the authoritative company list.
+///
+/// Only stationary companies (destination == null or destination == currentNode)
+/// are included. Companies at the same node are sorted lexicographically by id
+/// so the slot order is deterministic across every render frame — no transient
+/// arrival-order state is needed.
+///
+/// This is called once per [_buildMap] frame and the result is passed to
+/// [_offsetForCompany] for each company, keeping slot assignment consistent
+/// within a frame.
+Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
+  final map = <String, List<String>>{};
+  for (final co in companies) {
+    final isStationary = co.destination == null ||
+        co.destination!.id == co.currentNode.id;
+    if (!isStationary) continue;
+    // Companies inside a castle are rendered at the castle centre (no offset).
+    if (co.currentNode is CastleNode) continue;
+    map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
+  }
+  // Sort each node's list by id so order is stable across rebuilds.
+  for (final ids in map.values) {
+    ids.sort();
+  }
+  return map;
+}
+
+/// Returns the pixel offset `(dx, dy)` for [company] given a [slotMap]
+/// derived from the live company list.
+///
+/// In-transit companies (destination ≠ currentNode) always return `(0, 0)`
+/// because their visual position is interpolated along the road — not snapped
+/// to a node slot.
+(double, double) _offsetForCompany(
+  CompanyOnMap company,
+  Map<String, List<String>> slotMap,
+) {
+  if (company.destination != null &&
+      company.destination!.id != company.currentNode.id) {
+    return (0.0, 0.0);
+  }
+  final ids = slotMap[company.currentNode.id];
+  if (ids == null) return (0.0, 0.0);
+  final slot = ids.indexOf(company.id);
+  if (slot < 0) return (0.0, 0.0);
+  if (slot >= _kSlotOffsets.length) return (0.0, 0.0);
+  return _kSlotOffsets[slot];
+}
 
 /// The main gameplay screen — renders the map, castle nodes, and Company markers.
 ///
@@ -204,6 +280,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
     }
 
+    // Build the slot map from the authoritative match-state company list so
+    // offsets are always correct — even after tick-driven movement where
+    // companies arrive at nodes without going through CompanyNotifier actions.
+    final slotMap = _buildSlotMap(companies);
+
     return Column(
       children: [
         // Movement hint banner shown when a company is selected.
@@ -278,23 +359,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // currentNode and the next node using stored progress plus
                   // elapsed time since the last logic tick, so markers slide
                   // smoothly across the map in real time.
+                  //
+                  // Stationary companies at the same node are spread across
+                  // offset slots derived from the live matchState company list
+                  // so every marker has its own 44 × 44 pt tap target
+                  // (FR-001, FR-003). slotMap is rebuilt each frame so it
+                  // stays in sync after tick-driven movement.
                   ...companies.map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
+                    final (ox, oy) = _offsetForCompany(co, slotMap);
 
                     return Positioned(
-                      left: cx - 18,
-                      top: cy - 18,
-                      child: CompanyMarker(
-                        key: ValueKey('company_marker_${co.id}'),
-                        company: co,
-                        x: cx,
-                        y: cy,
-                        isSelected: isSelected,
-                        onTap: () => _onCompanyTap(context, co, companyState),
-                        onLongPress: co.ownership == Ownership.player
-                            ? () => _onCompanyLongPress(context, co)
-                            : null,
+                      key: ValueKey('positioned_${co.id}'),
+                      left: cx + ox - 22,
+                      top: cy + oy - 22,
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: CompanyMarker(
+                          key: ValueKey('company_marker_${co.id}'),
+                          company: co,
+                          x: cx + ox,
+                          y: cy + oy,
+                          isSelected: isSelected,
+                          onTap: () => _onCompanyTap(context, co, companyState),
+                          onLongPress: co.ownership == Ownership.player
+                              ? () => _onCompanyLongPress(context, co)
+                              : null,
+                        ),
                       ),
                     );
                   }),
@@ -405,24 +498,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: SplitSlider(
-          key: ValueKey('split_slider_${co.id}'),
-          company: co,
-          onConfirm: (splitMap) {
-            Navigator.of(ctx).pop();
-            ref
-                .read(companyNotifierProvider.notifier)
-                .splitCompany(co.id, splitMap);
-          },
-        ),
+      builder: (ctx) => SplitSlider(
+        key: ValueKey('split_slider_${co.id}'),
+        company: co,
+        onConfirm: (splitMap) {
+          Navigator.of(ctx).pop();
+          ref
+              .read(companyNotifierProvider.notifier)
+              .splitCompany(co.id, splitMap);
+        },
       ),
     );
   }
@@ -445,10 +534,147 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
+    // No selection: check for multiple stationary player companies at this
+    // road junction — if so, show a disambiguation panel (FR-001, User Story 1).
+    if (node is RoadJunctionNode) {
+      final stationaryAtNode = matchState.companies
+          .where((co) =>
+              co.currentNode.id == node.id &&
+              (co.destination == null || co.destination!.id == co.currentNode.id) &&
+              co.ownership == Ownership.player)
+          .toList();
+      if (stationaryAtNode.length >= 2) {
+        _showNodeDisambiguationSheet(context, node, stationaryAtNode, companyState);
+        return;
+      }
+      // Single or no player company — direct tap selects it (handled by marker tap).
+      return;
+    }
+
     // No selection: if tapping a castle, open the castle sheet.
     if (node is CastleNode) {
       _showCastleSheet(context, node, matchState);
     }
+  }
+
+  /// Bottom sheet shown when a road junction has multiple stationary player
+  /// companies and the user taps the node area (FR-001, User Story 1).
+  ///
+  /// Lists all companies at the node so the player can select any one of them,
+  /// even if the offset markers are hard to tap individually at a given zoom level.
+  void _showNodeDisambiguationSheet(
+    BuildContext context,
+    RoadJunctionNode node,
+    List<CompanyOnMap> companies,
+    CompanyListState companyState,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.place, color: AppTheme.ironDark, size: 24),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${companies.length} Companies at this junction',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.ironDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a company to manage it:',
+                style: TextStyle(color: AppTheme.stone, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...companies.map((co) {
+                final isSelected = co.id == companyState.selectedCompanyId;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    key: ValueKey('disambiguation_${co.id}'),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _onCompanyTap(context, co, companyState);
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.gold.withAlpha(60)
+                            : AppTheme.ironDark.withAlpha(10),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.gold : AppTheme.stone.withAlpha(80),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppTheme.bloodRed,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.shield,
+                                color: Colors.white, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Company',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.ironDark,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '${co.company.totalSoldiers.value} soldiers',
+                                  style: const TextStyle(
+                                    color: AppTheme.stone,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle,
+                                color: AppTheme.gold, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Bottom sheet shown when a castle node is tapped with no company selected.
@@ -462,9 +688,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   ) {
     final castle = matchState.castles.firstWhere((c) => c.id == castleNode.id);
     final isPlayerCastle = castle.ownership == Ownership.player;
-    final stationedCount = matchState.companies
+    final stationedCompanies = matchState.companies
         .where((co) => co.currentNode.id == castleNode.id && co.destination == null)
-        .length;
+        .toList();
+    final stationedCount = stationedCompanies.length;
+    final totalDefenders = stationedCompanies.fold<int>(
+      0,
+      (sum, co) => sum + co.company.totalSoldiers.value,
+    );
 
     showModalBottomSheet<void>(
       context: context,
@@ -500,10 +731,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                'Companies stationed: $stationedCount',
-                style: const TextStyle(color: AppTheme.stone, fontSize: 14),
-              ),
+              if (isPlayerCastle)
+                Text(
+                  'Companies stationed: $stationedCount',
+                  style: const TextStyle(color: AppTheme.stone, fontSize: 14),
+                )
+              else
+                Text(
+                  'Defenders: $totalDefenders soldiers',
+                  style: const TextStyle(color: AppTheme.stone, fontSize: 14),
+                ),
               const SizedBox(height: 16),
               if (isPlayerCastle) ...[
                 OutlinedButton.icon(
