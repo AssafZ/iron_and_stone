@@ -21,7 +21,6 @@ class CastleScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final matchAsync = ref.watch(matchNotifierProvider);
-    final castleListAsync = ref.watch(castleNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -33,64 +32,64 @@ class CastleScreen extends ConsumerWidget {
       body: matchAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
-        data: (matchState) => castleListAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (castleList) {
-            final castleState = castleList
-                .where((c) => c.id == castleId)
-                .firstOrNull;
+        data: (matchState) {
+          // Derive castle state directly from matchState — avoids a secondary
+          // castleNotifierProvider watch that transitions through AsyncLoading
+          // on every matchNotifierProvider update, which destroys and recreates
+          // _CompaniesRosterCardState and invalidates any captured refs.
+          final castle =
+              matchState.castles.where((c) => c.id == castleId).firstOrNull;
 
-            if (castleState == null) {
-              return const Center(child: Text('Castle not found.'));
-            }
+          if (castle == null) {
+            return const Center(child: Text('Castle not found.'));
+          }
 
-            // Companies currently stationed at this castle node.
-            final stationedCompanies = matchState.companies
-                .where((co) =>
-                    co.currentNode.id == castleId &&
-                    co.destination == null)
-                .toList();
+          final castleState = CastleState(castle: castle);
 
-            // All companies at this node (including those passing through).
-            final allCompaniesHere = matchState.companies
-                .where((co) => co.currentNode.id == castleId)
-                .toList();
+          // Companies currently stationed at this castle node.
+          final stationedCompanies = matchState.companies
+              .where((co) =>
+                  co.currentNode.id == castleId && co.destination == null)
+              .toList();
 
-            // Peasant count from stationed companies (drives growth rate).
-            final peasantsInCompanies = stationedCompanies.fold<int>(
-              0,
-              (sum, co) => sum + (co.company.composition[UnitRole.peasant] ?? 0),
-            );
+          // All companies at this node (including those passing through).
+          final allCompaniesHere = matchState.companies
+              .where((co) => co.currentNode.id == castleId)
+              .toList();
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Castle stats card
-                  _CastleStatsCard(
-                    castleState: castleState,
-                    peasantsInCompanies: peasantsInCompanies,
-                  ),
-                  const SizedBox(height: 16),
-                  // Companies at this castle — roster (player) or read-only summary (enemy/neutral)
-                  if (castleState.ownership == Ownership.player) ...[
-                    if (allCompaniesHere.isNotEmpty)
-                      _CompaniesRosterCard(
-                        companies: allCompaniesHere,
-                        castleId: castleId,
-                      ),
-                  ] else ...[
-                    _EnemyDefenderSummary(
-                      companies: stationedCompanies,
+          // Peasant count from stationed companies (drives growth rate).
+          final peasantsInCompanies = stationedCompanies.fold<int>(
+            0,
+            (sum, co) => sum + (co.company.composition[UnitRole.peasant] ?? 0),
+          );
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Castle stats card
+                _CastleStatsCard(
+                  castleState: castleState,
+                  peasantsInCompanies: peasantsInCompanies,
+                ),
+                const SizedBox(height: 16),
+                // Companies at this castle — roster (player) or read-only summary (enemy/neutral)
+                if (castleState.ownership == Ownership.player) ...[
+                  if (allCompaniesHere.isNotEmpty)
+                    _CompaniesRosterCard(
+                      companies: allCompaniesHere,
+                      castleId: castleId,
                     ),
-                  ],
+                ] else ...[
+                  _EnemyDefenderSummary(
+                    companies: stationedCompanies,
+                  ),
                 ],
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
