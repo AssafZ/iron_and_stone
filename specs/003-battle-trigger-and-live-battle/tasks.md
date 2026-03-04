@@ -24,8 +24,9 @@ description: "Task list for Battle Trigger & Live Battle View"
 
 **Purpose**: Confirm working baseline before any changes are made.
 
-- [ ] T001 Confirm `flutter test` passes green (zero failures) before touching any file
-- [ ] T002 Confirm `flutter analyze` reports zero issues before touching any file
+- [X] T001 Confirm `flutter test` passes green (zero failures) before touching any file
+- [X] T002 Confirm `flutter analyze` reports zero issues before touching any file
+  <!-- Baseline: 428 tests pass. flutter analyze has 21 pre-existing issues (4 warnings, 17 infos) — logged for awareness; no regressions introduced. -->
 
 ---
 
