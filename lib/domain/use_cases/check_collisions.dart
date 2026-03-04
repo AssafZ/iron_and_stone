@@ -60,6 +60,10 @@ final class CompanyOnMap {
   /// and the remainder is kept for the next tick.
   final Map<UnitRole, double> growthRemainder;
 
+  /// ID of the [ActiveBattle] this Company is currently locked into, or null
+  /// when the Company is not in battle.
+  final String? battleId;
+
   const CompanyOnMap({
     required this.company,
     required this.id,
@@ -68,11 +72,16 @@ final class CompanyOnMap {
     this.destination,
     this.progress = 0.0,
     this.growthRemainder = const {},
+    this.battleId,
   });
 
   /// Sentinel used to distinguish "caller passed null explicitly" from
   /// "caller did not pass the argument at all" for the nullable [destination].
   static const Object _destinationSentinel = Object();
+
+  /// Sentinel used to distinguish "caller passed null explicitly" from
+  /// "caller did not pass the argument at all" for the nullable [battleId].
+  static const Object _battleIdSentinel = Object();
 
   CompanyOnMap copyWith({
     Company? company,
@@ -82,6 +91,7 @@ final class CompanyOnMap {
     Object? destination = _destinationSentinel,
     double? progress,
     Map<UnitRole, double>? growthRemainder,
+    Object? battleId = _battleIdSentinel,
   }) {
     return CompanyOnMap(
       company: company ?? this.company,
@@ -93,6 +103,9 @@ final class CompanyOnMap {
           : destination as MapNode?,
       progress: progress ?? this.progress,
       growthRemainder: growthRemainder ?? this.growthRemainder,
+      battleId: identical(battleId, _battleIdSentinel)
+          ? this.battleId
+          : battleId as String?,
     );
   }
 

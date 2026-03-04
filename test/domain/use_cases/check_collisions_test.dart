@@ -64,6 +64,56 @@ void main() {
   late GameMap map;
   late CheckCollisions useCase;
 
+  // -----------------------------------------------------------------------
+  // T003: CompanyOnMap.copyWith clears battleId when explicit null is passed
+  // -----------------------------------------------------------------------
+
+  group('CompanyOnMap.copyWith — battleId sentinel', () {
+    test(
+      'T003: battleId is preserved when copyWith is called without battleId arg',
+      () {
+        final co = CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+          battleId: 'battle_junction_mid',
+        );
+        final copied = co.copyWith(progress: 0.5);
+        expect(copied.battleId, equals('battle_junction_mid'));
+      },
+    );
+
+    test(
+      'T003: battleId is cleared (null) when copyWith is called with explicit null',
+      () {
+        final co = CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+          battleId: 'battle_junction_mid',
+        );
+        // ignore: inference_failure_on_function_invocation
+        final cleared = co.copyWith(battleId: null);
+        expect(cleared.battleId, isNull);
+      },
+    );
+
+    test(
+      'T003: battleId defaults to null when not supplied to constructor',
+      () {
+        final co = CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+        );
+        expect(co.battleId, isNull);
+      },
+    );
+  });
+
   setUp(() {
     map = _makeMap();
     useCase = const CheckCollisions();

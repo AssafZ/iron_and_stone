@@ -39,20 +39,20 @@ implemented. Nothing in Phase 3+ can start until this phase is complete.
 
 ### 2a — `battleId` field on `CompanyOnMap` (domain)
 
-- [ ] T003 Write **failing** unit test: `CompanyOnMap.copyWith` clears `battleId` when explicit `null` is passed — extend `test/domain/use_cases/check_collisions_test.dart`
-- [ ] T004 Add `String? battleId` field and sentinel `copyWith` support to `CompanyOnMap` in `lib/domain/use_cases/check_collisions.dart` (mirror the existing `destination` sentinel pattern — see `copyWith` at line 80); confirm T003 turns green
+- [X] T003 Write **failing** unit test: `CompanyOnMap.copyWith` clears `battleId` when explicit `null` is passed — extend `test/domain/use_cases/check_collisions_test.dart`
+- [X] T004 Add `String? battleId` field and sentinel `copyWith` support to `CompanyOnMap` in `lib/domain/use_cases/check_collisions.dart` (mirror the existing `destination` sentinel pattern — see `copyWith` at line 80); confirm T003 turns green
 
 ### 2b — `ActiveBattle` entity (domain)
 
-- [ ] T005 [P] Write **failing** unit test: `ActiveBattle.id` equals `"battle_<nodeId>"` — create `test/domain/entities/active_battle_test.dart`
-- [ ] T006 [P] Create `ActiveBattle` entity — new file `lib/domain/entities/active_battle.dart`; fields: `id` (`String`), `nodeId` (`String`), `attackerCompanyIds` (`List<String>`), `defenderCompanyIds` (`List<String>`), `attackerOwnership` (`Ownership`), `battle` (`Battle`); add `factory`, `copyWith`, `toString`; confirm T005 turns green
+- [X] T005 [P] Write **failing** unit test: `ActiveBattle.id` equals `"battle_<nodeId>"` — create `test/domain/entities/active_battle_test.dart`
+- [X] T006 [P] Create `ActiveBattle` entity — new file `lib/domain/entities/active_battle.dart`; fields: `id` (`String`), `nodeId` (`String`), `attackerCompanyIds` (`List<String>`), `defenderCompanyIds` (`List<String>`), `attackerOwnership` (`Ownership`), `battle` (`Battle`); add `factory`, `copyWith`, `toString`; confirm T005 turns green
 
 ### 2c — Drift schema migration (data)
 
-- [ ] T007 [P] Create `BattlesTable` drift table — new file `lib/data/drift/tables/battles_table.dart`; columns: `id` (TEXT PK), `matchId` (TEXT), `nodeId` (TEXT), `attackerCompanyIds` (TEXT, JSON array), `defenderCompanyIds` (TEXT, JSON array), `attackerOwnership` (TEXT), `battleJson` (TEXT)
-- [ ] T008 [P] Add nullable `battleId` column (TEXT, default `''`) to `CompaniesTable` in `lib/data/drift/tables/companies_table.dart`
-- [ ] T009 Register `BattlesTable` in `@DriftDatabase` annotation and bump `schemaVersion` to `2` with `MigrationStrategy.onUpgrade` (`ALTER TABLE companies ADD COLUMN battle_id` + `createTable(battlesTable)`) in `lib/data/drift/app_database.dart` — **depends on T007, T008**
-- [ ] T010 Run drift codegen: `dart run build_runner build --delete-conflicting-outputs` — **depends on T009**; verify `.g.dart` files regenerate without errors
+- [X] T007 [P] Create `BattlesTable` drift table — new file `lib/data/drift/tables/battles_table.dart`; columns: `id` (TEXT PK), `matchId` (TEXT), `nodeId` (TEXT), `attackerCompanyIds` (TEXT, JSON array), `defenderCompanyIds` (TEXT, JSON array), `attackerOwnership` (TEXT), `battleJson` (TEXT)
+- [X] T008 [P] Add nullable `battleId` column (TEXT, default `''`) to `CompaniesTable` in `lib/data/drift/tables/companies_table.dart`
+- [X] T009 Register `BattlesTable` in `@DriftDatabase` annotation and bump `schemaVersion` to `2` with `MigrationStrategy.onUpgrade` (`ALTER TABLE companies ADD COLUMN battle_id` + `createTable(battlesTable)`) in `lib/data/drift/app_database.dart` — **depends on T007, T008**
+- [X] T010 Run drift codegen: `dart run build_runner build --delete-conflicting-outputs` — **depends on T009**; verify `.g.dart` files regenerate without errors
 
 **Checkpoint**: Foundation ready — domain entity exists, `CompanyOnMap` carries `battleId`, DB schema is at v2. User story phases can now begin.
 
