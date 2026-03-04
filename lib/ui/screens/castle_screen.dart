@@ -416,8 +416,9 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                     .length >=
                     1) ...[
               const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                spacing: 8,
                 children: [
                   if (companies
                           .where((co) =>
@@ -454,7 +455,6 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                         });
                       },
                     ),
-                  const SizedBox(width: 8),
                   TextButton.icon(
                     key: const ValueKey('castle_split_button'),
                     icon: const Icon(Icons.call_split, size: 16),
