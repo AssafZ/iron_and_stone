@@ -215,11 +215,19 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
         child: SplitSlider(
           key: ValueKey('castle_split_slider_${co.id}'),
           company: co,
-          onConfirm: (splitMap) {
+          onConfirm: (splitMap) async {
             Navigator.of(ctx).pop();
-            ref
-                .read(companyNotifierProvider.notifier)
-                .splitCompany(co.id, splitMap);
+            try {
+              await ref
+                  .read(companyNotifierProvider.notifier)
+                  .splitCompany(co.id, splitMap);
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Split failed: $e')),
+                );
+              }
+            }
           },
         ),
       ),
