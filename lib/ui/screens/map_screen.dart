@@ -6,7 +6,6 @@ import 'package:iron_and_stone/data/settings_repository.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
-import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
@@ -44,24 +43,49 @@ const List<(double, double)> _kSlotOffsets = [
   (_kSlotRadius, _kSlotRadius),      // slot 8 — bottom-right
 ];
 
-/// Returns the pixel offset `(dx, dy)` for [company] given the current
-/// [occupancy] map.
+/// Builds a node-occupancy map directly from the authoritative company list.
+///
+/// Only stationary companies (destination == null or destination == currentNode)
+/// are included. Companies at the same node are sorted lexicographically by id
+/// so the slot order is deterministic across every render frame — no transient
+/// arrival-order state is needed.
+///
+/// This is called once per [_buildMap] frame and the result is passed to
+/// [_offsetForCompany] for each company, keeping slot assignment consistent
+/// within a frame.
+Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
+  final map = <String, List<String>>{};
+  for (final co in companies) {
+    final isStationary = co.destination == null ||
+        co.destination!.id == co.currentNode.id;
+    if (!isStationary) continue;
+    map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
+  }
+  // Sort each node's list by id so order is stable across rebuilds.
+  for (final ids in map.values) {
+    ids.sort();
+  }
+  return map;
+}
+
+/// Returns the pixel offset `(dx, dy)` for [company] given a [slotMap]
+/// derived from the live company list.
 ///
 /// In-transit companies (destination ≠ currentNode) always return `(0, 0)`
 /// because their visual position is interpolated along the road — not snapped
 /// to a node slot.
 (double, double) _offsetForCompany(
   CompanyOnMap company,
-  Map<String, NodeOccupancy> occupancy,
+  Map<String, List<String>> slotMap,
 ) {
   if (company.destination != null &&
       company.destination!.id != company.currentNode.id) {
     return (0.0, 0.0);
   }
-  final occ = occupancy[company.currentNode.id];
-  if (occ == null) return (0.0, 0.0);
-  final slot = occ.slotIndex(company.id);
-  if (slot == null) return (0.0, 0.0);
+  final ids = slotMap[company.currentNode.id];
+  if (ids == null) return (0.0, 0.0);
+  final slot = ids.indexOf(company.id);
+  if (slot < 0) return (0.0, 0.0);
   if (slot >= _kSlotOffsets.length) return (0.0, 0.0);
   return _kSlotOffsets[slot];
 }
@@ -253,6 +277,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
     }
 
+    // Build the slot map from the authoritative match-state company list so
+    // offsets are always correct — even after tick-driven movement where
+    // companies arrive at nodes without going through CompanyNotifier actions.
+    final slotMap = _buildSlotMap(companies);
+
     return Column(
       children: [
         // Movement hint banner shown when a company is selected.
@@ -329,13 +358,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // smoothly across the map in real time.
                   //
                   // Stationary companies at the same node are spread across
-                  // offset slots from NodeOccupancy so every marker has its
-                  // own 44 × 44 pt tap target (FR-001, FR-003).
+                  // offset slots derived from the live matchState company list
+                  // so every marker has its own 44 × 44 pt tap target
+                  // (FR-001, FR-003). slotMap is rebuilt each frame so it
+                  // stays in sync after tick-driven movement.
                   ...companies.map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
-                    final (ox, oy) =
-                        _offsetForCompany(co, companyState.nodeOccupancy);
+                    final (ox, oy) = _offsetForCompany(co, slotMap);
 
                     return Positioned(
                       key: ValueKey('positioned_${co.id}'),

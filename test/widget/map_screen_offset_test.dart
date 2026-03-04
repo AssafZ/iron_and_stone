@@ -7,7 +7,6 @@ import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
-import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,28 +59,43 @@ const _kSlotOffsets = [
   (_kSlotRadius, _kSlotRadius),    // slot 8
 ];
 
+/// Mirrors _buildSlotMap from map_screen.dart: builds a node-id → sorted
+/// company-id list from [companies], stationary only.
+Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
+  final map = <String, List<String>>{};
+  for (final co in companies) {
+    final isStationary = co.destination == null ||
+        co.destination!.id == co.currentNode.id;
+    if (!isStationary) continue;
+    map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
+  }
+  for (final ids in map.values) {
+    ids.sort();
+  }
+  return map;
+}
+
+/// Mirrors _offsetForCompany from map_screen.dart.
 (double, double) _offsetForCompany(
   CompanyOnMap co,
-  Map<String, NodeOccupancy> occupancy,
+  Map<String, List<String>> slotMap,
 ) {
-  // In-transit companies get no offset.
   if (co.destination != null && co.destination!.id != co.currentNode.id) {
     return (0.0, 0.0);
   }
-  final occ = occupancy[co.currentNode.id];
-  if (occ == null) return (0.0, 0.0);
-  final slot = occ.slotIndex(co.id);
-  if (slot == null) return (0.0, 0.0);
+  final ids = slotMap[co.currentNode.id];
+  if (ids == null) return (0.0, 0.0);
+  final slot = ids.indexOf(co.id);
+  if (slot < 0) return (0.0, 0.0);
   if (slot >= _kSlotOffsets.length) return (0.0, 0.0);
   return _kSlotOffsets[slot];
 }
 
 /// A minimal test scaffold that renders companies at offset Positioned slots.
 ///
-/// [onTapA] / [onTapB] are callbacks so tests can verify which marker was hit.
+/// [tapCallbacks] are callbacks so tests can verify which marker was hit.
 class _OffsetMapScaffold extends StatelessWidget {
   final List<CompanyOnMap> companies;
-  final Map<String, NodeOccupancy> occupancy;
   final Map<String, VoidCallback> tapCallbacks;
   // Canvas centre for the shared node
   static const double _cx = 200.0;
@@ -90,12 +104,13 @@ class _OffsetMapScaffold extends StatelessWidget {
 
   const _OffsetMapScaffold({
     required this.companies,
-    required this.occupancy,
     required this.tapCallbacks,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Build slot map from the live company list — same logic as map_screen.dart.
+    final slotMap = _buildSlotMap(companies);
     return MaterialApp(
       home: Scaffold(
         body: SizedBox(
@@ -106,7 +121,7 @@ class _OffsetMapScaffold extends StatelessWidget {
             children: [
               for (final co in companies)
                 Builder(builder: (ctx) {
-                  final (ox, oy) = _offsetForCompany(co, occupancy);
+                  final (ox, oy) = _offsetForCompany(co, slotMap);
                   final left = _cx + ox - _kMarkerSize / 2;
                   final top = _cy + oy - _kMarkerSize / 2;
                   return Positioned(
@@ -150,14 +165,9 @@ void main() {
       final coA = _makeCompany(id: 'co_a', currentNode: _junction);
       final coB = _makeCompany(id: 'co_b', currentNode: _junction, ownership: Ownership.ai);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(nodeId: _junction.id, orderedIds: ['co_a', 'co_b']),
-      };
-
       await tester.pumpWidget(
         _OffsetMapScaffold(
           companies: [coA, coB],
-          occupancy: occupancy,
           tapCallbacks: {},
         ),
       );
@@ -181,17 +191,12 @@ void main() {
       final coA = _makeCompany(id: 'co_a', currentNode: _junction);
       final coB = _makeCompany(id: 'co_b', currentNode: _junction);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(nodeId: _junction.id, orderedIds: ['co_a', 'co_b']),
-      };
-
       var tappedA = false;
       var tappedB = false;
 
       await tester.pumpWidget(
         _OffsetMapScaffold(
           companies: [coA, coB],
-          occupancy: occupancy,
           tapCallbacks: {
             'co_a': () => tappedA = true,
             'co_b': () => tappedB = true,
@@ -224,17 +229,12 @@ void main() {
       final coA = _makeCompany(id: 'co_a', currentNode: _junction);
       final coB = _makeCompany(id: 'co_b', currentNode: _junction);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(nodeId: _junction.id, orderedIds: ['co_a', 'co_b']),
-      };
-
       var tappedA = false;
       var tappedB = false;
 
       await tester.pumpWidget(
         _OffsetMapScaffold(
           companies: [coA, coB],
-          occupancy: occupancy,
           tapCallbacks: {
             'co_a': () => tappedA = true,
             'co_b': () => tappedB = true,
@@ -265,15 +265,9 @@ void main() {
       final coB = _makeCompany(id: 'co_b', currentNode: _junction);
       final coC = _makeCompany(id: 'co_c', currentNode: _junction);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(
-            nodeId: _junction.id, orderedIds: ['co_a', 'co_b', 'co_c']),
-      };
-
       await tester.pumpWidget(
         _OffsetMapScaffold(
           companies: [coA, coB, coC],
-          occupancy: occupancy,
           tapCallbacks: {},
         ),
       );
@@ -369,12 +363,11 @@ void main() {
       final coA = _makeCompany(id: 'co_a', currentNode: _junction);
       final coB = _makeCompany(id: 'co_b', currentNode: _junction);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(nodeId: _junction.id, orderedIds: ['co_a', 'co_b']),
-      };
-
       // Track whether the merge callback was triggered.
       var mergePromptShown = false;
+
+      // Build the slot map the same way map_screen.dart does.
+      final slotMap = _buildSlotMap([coA, coB]);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -387,7 +380,7 @@ void main() {
                 children: [
                   for (final co in [coA, coB])
                     Builder(builder: (ctx) {
-                      final (ox, oy) = _offsetForCompany(co, occupancy);
+                      final (ox, oy) = _offsetForCompany(co, slotMap);
                       const cx = 200.0, cy = 200.0;
                       return Positioned(
                         key: ValueKey('positioned_${co.id}'),
@@ -441,14 +434,9 @@ void main() {
       // Only one company remains after compaction — it occupies slot 0.
       final coA = _makeCompany(id: 'co_a', currentNode: _junction);
 
-      final occupancy = {
-        _junction.id: NodeOccupancy(nodeId: _junction.id, orderedIds: ['co_a']),
-      };
-
       await tester.pumpWidget(
         _OffsetMapScaffold(
           companies: [coA],
-          occupancy: occupancy,
           tapCallbacks: {},
         ),
       );
