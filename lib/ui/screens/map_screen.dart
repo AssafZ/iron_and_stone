@@ -27,9 +27,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [_kSlotRadius] px so that every 44 × 44 pt tap target is fully
 /// non-overlapping even at canvas scale 1.0.
 ///
-/// [_kSlotRadius] must be ≥ 44 px (one full tap-target width) so adjacent
-/// markers never overlap. Using 52 px gives a comfortable gap on all densities.
-const double _kSlotRadius = 52.0;
+/// [_kSlotRadius] must be ≥ half the tap-target width (22 px) so adjacent
+/// markers never overlap. Using 28 px gives clear visual separation while
+/// keeping the spread compact relative to the map scale.
+const double _kSlotRadius = 28.0;
 
 const List<(double, double)> _kSlotOffsets = [
   (0.0, 0.0),                        // slot 0 — centre

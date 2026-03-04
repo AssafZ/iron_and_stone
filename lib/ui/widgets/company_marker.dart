@@ -70,30 +70,30 @@ class CompanyMarker extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Container(
-          width: 36,
-          height: 36,
+          width: 18,
+          height: 18,
           decoration: BoxDecoration(
             color: ownerColor,
             shape: BoxShape.circle,
             border: isSelected
-                ? Border.all(color: AppTheme.gold, width: 3)
-                : Border.all(color: Colors.white, width: 2),
+                ? Border.all(color: AppTheme.gold, width: 2)
+                : Border.all(color: Colors.white, width: 1.5),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black38,
-                blurRadius: 4,
-                offset: Offset(1, 2),
+                blurRadius: 3,
+                offset: Offset(1, 1),
               ),
             ],
           ),
-          child: const Icon(Icons.shield, color: Colors.white, size: 18),
+          child: const Icon(Icons.shield, color: Colors.white, size: 10),
         ),
         // Unit count badge
         Positioned(
           right: -4,
           top: -4,
           child: Container(
-            padding: const EdgeInsets.all(3),
+            padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: AppTheme.gold,
               shape: BoxShape.circle,
@@ -102,7 +102,7 @@ class CompanyMarker extends StatelessWidget {
             child: Text(
               '${company.company.totalSoldiers.value}',
               style: const TextStyle(
-                fontSize: 9,
+                fontSize: 7,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.ironDark,
               ),
@@ -112,11 +112,11 @@ class CompanyMarker extends StatelessWidget {
         // Selection ring indicator
         if (isSelected)
           Positioned(
-            left: -6,
-            top: -6,
+            left: -5,
+            top: -5,
             child: Container(
-              width: 48,
-              height: 48,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: AppTheme.gold, width: 2),

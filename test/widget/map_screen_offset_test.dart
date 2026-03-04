@@ -45,8 +45,8 @@ CompanyOnMap _makeCompany({
 // ---------------------------------------------------------------------------
 
 /// The slot-offset table (mirrors _kSlotOffsets from map_screen.dart).
-/// Radius must be ≥ 44 px so adjacent 44 × 44 tap targets never overlap.
-const double _kSlotRadius = 52.0;
+/// Radius kept ≥ 22 px (half of 44 pt tap target) so markers don't overlap.
+const double _kSlotRadius = 28.0;
 const _kSlotOffsets = [
   (0.0, 0.0),                      // slot 0 — centre
   (_kSlotRadius, 0.0),             // slot 1 — right
@@ -206,12 +206,11 @@ void main() {
       await tester.pump();
 
       // co_a is at slot 0 (centre, offset 0,0)  → Positioned left=178, top=178.
-      // co_b is at slot 1 (right, offset +52,0) → Positioned left=230, top=178.
-      // With 52 px spacing the boxes no longer overlap at all.
+      // co_b is at slot 1 (right, offset +28,0) → Positioned left=206, top=178.
       // Tap the LEFT edge of co_a's 44 px box (x≈183) which is exclusively
-      // in co_a's region and well clear of co_b (which starts at x=230).
+      // in co_a's region — well to the left of co_b's centre.
       final posA = tester.getTopLeft(find.byKey(const ValueKey('positioned_co_a')));
-      // Tap 5 px from the left edge of co_a's 44 px box — well outside co_b's range.
+      // Tap 5 px from the left edge of co_a's 44 px box.
       await tester.tapAt(Offset(posA.dx + 5, posA.dy + 22));
       await tester.pump();
 
@@ -243,9 +242,9 @@ void main() {
       );
       await tester.pump();
 
-      // co_b is at slot 1 (right, offset +52,0) → Positioned left=230, top=178.
-      // Tap the RIGHT edge of co_b's 44 px box (x≈268) which is exclusively
-      // in co_b's region and completely outside co_a's range (178..222).
+      // co_b is at slot 1 (right, offset +28,0) → Positioned left=206, top=178.
+      // Tap the RIGHT edge of co_b's 44 px box (x≈244) which is exclusively
+      // in co_b's region and well outside co_a's right edge (x=222).
       final posB = tester.getTopLeft(find.byKey(const ValueKey('positioned_co_b')));
       await tester.tapAt(Offset(posB.dx + 38, posB.dy + 22));
       await tester.pump();
