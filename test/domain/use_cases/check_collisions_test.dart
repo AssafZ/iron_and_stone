@@ -166,33 +166,74 @@ void main() {
     });
 
     group('FR-015: Company arriving at enemy castle node', () {
-      test('player Company at AI castle returns a castle-assault trigger', () {
-        final playerAtAiCastle = _makeCompany(
-          id: 'player_co',
-          ownership: Ownership.player,
-          currentNode: _aiCastle,
-        );
-        final triggers = useCase.check(map: map, companies: [playerAtAiCastle]);
-        expect(triggers, isNotEmpty);
-        expect(
-          triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
-          isTrue,
-        );
-      });
+      test(
+        'player Company at AI castle with AI garrison returns a castle-assault trigger',
+        () {
+          final playerAtAiCastle = _makeCompany(
+            id: 'player_co',
+            ownership: Ownership.player,
+            currentNode: _aiCastle,
+          );
+          // AI garrison present at its own castle (stationary)
+          final aiGarrison = _makeCompany(
+            id: 'ai_garrison',
+            ownership: Ownership.ai,
+            currentNode: _aiCastle,
+            destination: null,
+          );
+          final triggers =
+              useCase.check(map: map, companies: [playerAtAiCastle, aiGarrison]);
+          expect(triggers, isNotEmpty);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
+            isTrue,
+          );
+        },
+      );
 
-      test('AI Company at player castle returns a castle-assault trigger', () {
-        final aiAtPlayerCastle = _makeCompany(
-          id: 'ai_co',
-          ownership: Ownership.ai,
-          currentNode: _playerCastle,
-        );
-        final triggers = useCase.check(map: map, companies: [aiAtPlayerCastle]);
-        expect(triggers, isNotEmpty);
-        expect(
-          triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
-          isTrue,
-        );
-      });
+      test(
+        'AI Company at player castle with player garrison returns a castle-assault trigger',
+        () {
+          final aiAtPlayerCastle = _makeCompany(
+            id: 'ai_co',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+          );
+          // Player garrison present at its own castle (stationary)
+          final playerGarrison = _makeCompany(
+            id: 'player_garrison',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            destination: null,
+          );
+          final triggers = useCase.check(
+              map: map, companies: [aiAtPlayerCastle, playerGarrison]);
+          expect(triggers, isNotEmpty);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
+            isTrue,
+          );
+        },
+      );
+
+      test(
+        'player Company at empty AI castle (no garrison) returns NO castle-assault trigger',
+        () {
+          final playerAtAiCastle = _makeCompany(
+            id: 'player_co',
+            ownership: Ownership.player,
+            currentNode: _aiCastle,
+          );
+          // No AI garrison — empty castle
+          final triggers =
+              useCase.check(map: map, companies: [playerAtAiCastle]);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.castleAssault),
+            isFalse,
+            reason: 'Empty enemy castle must not trigger castleAssault',
+          );
+        },
+      );
 
       test('friendly Company at own castle returns no trigger', () {
         final playerAtOwnCastle = _makeCompany(
@@ -578,6 +619,202 @@ void main() {
 
           expect(roadTriggers, hasLength(1));
           expect(roadTriggers.first.companyIds, containsAll(['ai1', 'ai2', 'p1']));
+        },
+        );
+    });
+
+    // -----------------------------------------------------------------------
+    // T025 / T025b: US2 — castleAssault triggered only by garrison companies
+    // -----------------------------------------------------------------------
+
+    group('T025: castleAssault trigger requires garrison companies at castle', () {
+      test(
+        'T025: attacking company arrives at enemy castle with garrison companies '
+        '→ castleAssault trigger is emitted',
+        () {
+          // AI garrison at player castle (stationary, destination == null)
+          final aiGarrison = _makeCompany(
+            id: 'ai_garrison',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            destination: null,
+          );
+          // Player attacker arriving at the castle
+          final playerAttacker = _makeCompany(
+            id: 'player_attack',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [aiGarrison, playerAttacker],
+          );
+
+          final castleTriggers = triggers
+              .where((t) => t.kind == BattleTriggerKind.castleAssault)
+              .toList();
+          expect(
+            castleTriggers,
+            isNotEmpty,
+            reason:
+                'castleAssault must be emitted when attacking company arrives '
+                'at enemy castle with garrison companies',
+          );
+        },
+      );
+
+      test(
+        'T025: castleAssault trigger includes IDs of defending garrison companies',
+        () {
+          // Two AI garrison companies at player castle
+          final aiG1 = _makeCompany(
+            id: 'ai_g1',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            destination: null,
+          );
+          final aiG2 = _makeCompany(
+            id: 'ai_g2',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            destination: null,
+          );
+          final playerAttacker = _makeCompany(
+            id: 'player_attack',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [aiG1, aiG2, playerAttacker],
+          );
+
+          final castleTrigger = triggers.firstWhere(
+            (t) => t.kind == BattleTriggerKind.castleAssault,
+          );
+          expect(
+            castleTrigger.companyIds,
+            containsAll(['ai_g1', 'ai_g2', 'player_attack']),
+            reason: 'Trigger must include all defending garrison and attacking company IDs',
+          );
+        },
+      );
+    });
+
+    group('T025b: in-transit company at castle does NOT count as garrison', () {
+      test(
+        'T025b: attacker arrives at enemy castle where the only enemy company '
+        'is in-transit (non-null destination) → no castleAssault (no living garrison)',
+        () {
+          // Player attacker at AI castle
+          final playerAttacker = _makeCompany(
+            id: 'player_attack',
+            ownership: Ownership.player,
+            currentNode: _aiCastle,
+            destination: null,
+          );
+          // AI company in transit through its own castle (has a destination → not garrison)
+          final aiTransiting = _makeCompany(
+            id: 'ai_transit',
+            ownership: Ownership.ai,
+            currentNode: _aiCastle,
+            destination: _junction, // in transit, not garrison
+          );
+
+          final triggers = useCase.check(
+            map: map,
+            companies: [playerAttacker, aiTransiting],
+          );
+
+          // Since the only AI company is in-transit, there is no garrison.
+          // castleAssault must NOT be triggered (only a roadCollision may fire if applicable).
+          final castleAssaultTriggers = triggers
+              .where((t) => t.kind == BattleTriggerKind.castleAssault)
+              .toList();
+          expect(
+            castleAssaultTriggers,
+            isEmpty,
+            reason:
+                'In-transit AI at own castle must not count as garrison defender; '
+                'no castleAssault should be emitted when there are no stationary garrison',
+          );
+        },
+      );
+
+      test(
+        'T025b: in-transit enemy at castle alone → castleAssault trigger is NOT emitted; '
+        'roadCollision may be emitted if any enemy company is present',
+        () {
+          // AI company in transit at player castle (no stationary player garrison)
+          final aiTransiting = _makeCompany(
+            id: 'ai_transit',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            destination: _junction, // in transit
+          );
+
+          // No player garrison companies present at all — ai_transit is just passing through.
+          // Also: there's no friendly player stationary company, so no garrison.
+          // Since ai_transit is the ONLY company at the castle and there's no enemy
+          // garrison company, no castleAssault is emitted.
+          final triggers = useCase.check(
+            map: map,
+            companies: [aiTransiting],
+          );
+
+          // ai_transit is at an enemy castle but there is no garrison → no castleAssault
+          expect(
+            triggers.where((t) => t.kind == BattleTriggerKind.castleAssault),
+            isEmpty,
+            reason:
+                'A single in-transit company at an enemy castle with no garrison '
+                'must not trigger a castleAssault',
+          );
+        },
+      );
+    });
+    // -----------------------------------------------------------------------
+    // T061 (Phase 4b): garrison with 0-soldier companies → no castleAssault
+    // -----------------------------------------------------------------------
+
+    group('T061: garrison companies with 0 soldiers are ignored', () {
+      test(
+        'T061: all garrison companies at castle have 0 soldiers → '
+        'attacking company captures castle without a battle (no castleAssault)',
+        () {
+          // AI garrison company with 0 soldiers (dead/empty) at AI castle
+          final deadGarrison = CompanyOnMap(
+            company: Company(composition: {}), // 0 soldiers
+            id: 'ai_dead',
+            ownership: Ownership.ai,
+            currentNode: _aiCastle,
+            destination: null,
+          );
+          // Player attacker arriving at the AI castle
+          final playerAttacker = _makeCompany(
+            id: 'player_attack',
+            ownership: Ownership.player,
+            currentNode: _aiCastle,
+          );
+
+          // The only AI company at the AI castle has 0 soldiers → not valid garrison
+          final triggers = useCase.check(
+            map: map,
+            companies: [deadGarrison, playerAttacker],
+          );
+
+          // castleAssault must NOT be triggered — dead garrison doesn't count
+          final castleTriggers = triggers
+              .where((t) => t.kind == BattleTriggerKind.castleAssault)
+              .toList();
+          expect(
+            castleTriggers.every((t) => !t.companyIds.contains('ai_dead')),
+            isTrue,
+            reason:
+                'A 0-soldier garrison company must not trigger a castleAssault',
+          );
         },
       );
     });

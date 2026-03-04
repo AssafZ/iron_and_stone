@@ -117,8 +117,11 @@ final class CompanyOnMap {
 /// Use case: detect battle triggers from the current map state.
 ///
 /// Checks for:
-/// - **FR-014**: Opposing Companies on the same road segment/node → [BattleTriggerKind.roadCollision]
-/// - **FR-015**: A Company arriving at an enemy [CastleNode] → [BattleTriggerKind.castleAssault]
+/// - **FR-001**: Opposing Companies on the same road segment/node → [BattleTriggerKind.roadCollision]
+/// - **FR-003**: A Company arriving at an enemy [CastleNode] that has stationary
+///   garrison companies → [BattleTriggerKind.castleAssault]
+/// - **FR-004**: An enemy castle with no living garrison is captured immediately
+///   (no battle trigger emitted).
 ///
 /// Pure Dart — zero Flutter/state imports.
 final class CheckCollisions {
@@ -131,22 +134,56 @@ final class CheckCollisions {
   }) {
     final triggers = <BattleTrigger>[];
 
-    // FR-015: Company at an enemy castle node
+    // FR-003: Company arriving at an enemy castle node that has garrison defenders.
+    // Only stationary companies (destination == null OR destination == currentNode)
+    // with at least 1 soldier at the castle count as garrison.
     for (final co in companies) {
       final node = co.currentNode;
-      if (node is CastleNode && _isEnemy(co.ownership, node.ownership)) {
+      if (node is! CastleNode) continue;
+      if (!isEnemy(co.ownership, node.ownership)) continue;
+
+      // Collect garrison defenders: companies at this castle node belonging to
+      // the castle's owner that are stationary and have >= 1 soldier.
+      final garrisonDefenders = companies.where((c) {
+        if (c.id == co.id) return false;
+        if (c.currentNode.id != node.id) return false;
+        if (c.ownership != node.ownership) return false;
+        final isStationary = c.destination == null || c.destination!.id == c.currentNode.id;
+        if (!isStationary) return false;
+        return c.company.totalSoldiers.value > 0;
+      }).toList();
+
+      if (garrisonDefenders.isEmpty) continue; // empty castle — no battle trigger
+
+      // Emit ONE castleAssault trigger with the attacker + all garrison defenders.
+      // Check we haven't already emitted one for this node (e.g. multiple attackers
+      // arriving simultaneously — they will be grouped into one trigger below).
+      final alreadyEmitted = triggers.any(
+        (t) => t.kind == BattleTriggerKind.castleAssault && t.location.id == node.id,
+      );
+      if (!alreadyEmitted) {
+        final allInvolvedIds = [
+          // All attackers (enemies of the castle owner) at this node
+          ...companies
+              .where((c) =>
+                  c.currentNode.id == node.id &&
+                  isEnemy(c.ownership, node.ownership))
+              .map((c) => c.id),
+          // All garrison defenders
+          ...garrisonDefenders.map((c) => c.id),
+        ];
         triggers.add(
           BattleTrigger(
             kind: BattleTriggerKind.castleAssault,
             location: node,
-            companyIds: [co.id],
+            companyIds: allInvolvedIds.toSet().toList(),
           ),
         );
       }
     }
 
-    // FR-014: Opposing Companies on the same node
-    // Group companies by their current node id
+    // FR-001: Opposing Companies on the same node (non-castle-assault nodes).
+    // Group companies by their current node id.
     final byNode = <String, List<CompanyOnMap>>{};
     for (final co in companies) {
       byNode.putIfAbsent(co.currentNode.id, () => []).add(co);
@@ -156,11 +193,10 @@ final class CheckCollisions {
       if (nodeGroup.length < 2) continue;
 
       // Determine if any two companies on this node are enemies.
-      // Collect ALL companies that have at least one enemy present.
       bool hasAnyEnemy = false;
       for (int i = 0; i < nodeGroup.length && !hasAnyEnemy; i++) {
         for (int j = i + 1; j < nodeGroup.length && !hasAnyEnemy; j++) {
-          if (_isEnemy(nodeGroup[i].ownership, nodeGroup[j].ownership)) {
+          if (isEnemy(nodeGroup[i].ownership, nodeGroup[j].ownership)) {
             hasAnyEnemy = true;
           }
         }
@@ -190,7 +226,7 @@ final class CheckCollisions {
     return triggers;
   }
 
-  static bool _isEnemy(Ownership a, Ownership b) {
+  static bool isEnemy(Ownership a, Ownership b) {
     if (a == Ownership.neutral || b == Ownership.neutral) return false;
     return a != b;
   }

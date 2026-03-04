@@ -1,11 +1,13 @@
 import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/domain/entities/active_battle.dart';
+import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/use_cases/advance_battle.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/tick_match.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
@@ -170,9 +172,139 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     state = AsyncData(current.copyWith(castles: updated));
   }
 
+  /// Advance one round of the [ActiveBattle] identified by [battleId].
+  ///
+  /// Delegates to [AdvanceBattle.advance]. If the round resolves the battle
+  /// (outcome becomes non-null), [_applyPostBattleCleanup] is called to:
+  ///   - Update survivor compositions from the final [Battle] state.
+  ///   - Remove zero-soldier companies.
+  ///   - Clear [CompanyOnMap.battleId] on survivors.
+  ///   - Transfer castle ownership on `castleAssault + attackersWin`.
+  ///   - Remove the [ActiveBattle] from [MatchState.activeBattles].
+  ///
+  /// Is a no-op when no [ActiveBattle] with the given [battleId] exists.
+  Future<void> advanceBattleRound(String battleId) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final idx = current.activeBattles.indexWhere((ab) => ab.id == battleId);
+    if (idx < 0) return; // no-op: unknown battleId
+
+    final advanced =
+        const AdvanceBattle().advance(current.activeBattles[idx]);
+
+    final newBattles = List<ActiveBattle>.from(current.activeBattles)
+      ..[idx] = advanced;
+
+    MatchState newState;
+    if (advanced.battle.outcome != null) {
+      // Battle resolved — run full Phase C cleanup.
+      newState = _applyPostBattleCleanup(
+        current.copyWith(activeBattles: newBattles),
+        advanced,
+      );
+    } else {
+      newState = current.copyWith(activeBattles: newBattles);
+    }
+
+    state = AsyncData(newState);
+
+    try {
+      await _dao?.saveMatch(matchId: _persistedMatchId, state: newState);
+    } catch (_) {
+      // Persistence failures must not crash the game loop.
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  /// Apply post-battle cleanup for a just-resolved [activeBattle].
+  ///
+  /// Mirrors Phase C logic in [TickMatch.tick] so that manual round advances
+  /// (via [advanceBattleRound]) produce identical cleanup behaviour.
+  MatchState _applyPostBattleCleanup(
+    MatchState current,
+    ActiveBattle activeBattle,
+  ) {
+    final outcome = activeBattle.battle.outcome!;
+
+    // Castle ownership transfer — attackersWin on castleAssault only.
+    var castles = current.castles;
+    if (activeBattle.battle.kind == BattleKind.castleAssault &&
+        outcome == BattleOutcome.attackersWin) {
+      castles = [
+        for (final c in castles)
+          if (c.id == activeBattle.nodeId)
+            c.copyWith(ownership: activeBattle.attackerOwnership)
+          else
+            c,
+      ];
+    }
+
+    // Build surviving / eliminated maps.
+    final updatedById = <String, Company>{}; // survivors: updated composition
+    final eliminatedIds = <String>{}; // eliminated: zero out
+
+    if (outcome == BattleOutcome.attackersWin) {
+      for (final entry in activeBattle.battle.attackers.asMap().entries) {
+        if (entry.key < activeBattle.attackerCompanyIds.length) {
+          updatedById[activeBattle.attackerCompanyIds[entry.key]] = entry.value;
+        }
+      }
+      eliminatedIds.addAll(activeBattle.defenderCompanyIds);
+    } else if (outcome == BattleOutcome.defendersWin) {
+      for (final entry in activeBattle.battle.defenders.asMap().entries) {
+        if (entry.key < activeBattle.defenderCompanyIds.length) {
+          updatedById[activeBattle.defenderCompanyIds[entry.key]] = entry.value;
+        }
+      }
+      eliminatedIds.addAll(activeBattle.attackerCompanyIds);
+    } else {
+      // draw — both sides eliminated
+      eliminatedIds.addAll(activeBattle.attackerCompanyIds);
+      eliminatedIds.addAll(activeBattle.defenderCompanyIds);
+    }
+
+    var companies = [
+      for (final co in current.companies)
+        if (co.battleId == activeBattle.id)
+          () {
+            if (eliminatedIds.contains(co.id)) {
+              return co.copyWith(
+                company: Company(composition: {}),
+                battleId: null,
+              );
+            }
+            final finalCompany = updatedById[co.id];
+            if (finalCompany != null) {
+              return co.copyWith(company: finalCompany, battleId: null);
+            }
+            return co.copyWith(battleId: null);
+          }()
+        else
+          co,
+    ];
+
+    // Remove zero-soldier companies.
+    companies = [
+      for (final co in companies)
+        if (co.company.totalSoldiers.value > 0) co,
+    ];
+
+    // Remove the resolved battle.
+    final newBattles = [
+      for (final ab in current.activeBattles)
+        if (ab.id != activeBattle.id) ab,
+    ];
+
+    return current.copyWith(
+      castles: castles,
+      companies: companies,
+      activeBattles: newBattles,
+    );
+  }
 
   static MatchState _buildInitialState() {
     final map = GameMapFixture.build();

@@ -10,6 +10,7 @@ import 'package:iron_and_stone/domain/rules/battle_engine.dart';
 import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
+import 'package:iron_and_stone/domain/use_cases/resolve_battle.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 
 // Re-export MatchOutcome so existing importers of tick_match.dart are unaffected.
@@ -96,39 +97,142 @@ final class TickMatch {
     );
 
     // ---------------------------------------------------------------------------
-    // Phase A: process new roadCollision triggers — create ActiveBattles + tag companies
+    // Empty-castle capture: a company NOT in a battle at an enemy castle with
+    // no garrison transfers ownership immediately (FR-004 / T026).
+    // ---------------------------------------------------------------------------
+    for (final co in updatedCompanies) {
+      if (co.battleId != null) continue; // skip companies already in a battle
+      final node = co.currentNode;
+      if (node is! CastleNode) continue;
+      if (!CheckCollisions.isEnemy(co.ownership, node.ownership)) continue;
+
+      // Check for living garrison (stationary companies at the castle belonging to its owner)
+      final hasLivingGarrison = updatedCompanies.any((c) {
+        if (c.currentNode.id != node.id) return false;
+        if (c.ownership != node.ownership) return false;
+        final isStationary = c.destination == null || c.destination!.id == c.currentNode.id;
+        return isStationary && c.company.totalSoldiers.value > 0;
+      });
+
+      if (!hasLivingGarrison) {
+        // Transfer castle ownership immediately — find and update the castle.
+        final castleIdx = updatedCastles.indexWhere((c) => c.id == node.id);
+        if (castleIdx >= 0) {
+          updatedCastles = List<Castle>.from(updatedCastles)
+            ..[castleIdx] = updatedCastles[castleIdx].copyWith(ownership: co.ownership);
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Phase A: process new battle triggers — create ActiveBattles + tag companies
     // ---------------------------------------------------------------------------
     var currentActiveBattles = List<ActiveBattle>.from(activeBattles);
     final existingBattleNodeIds = {for (final b in currentActiveBattles) b.nodeId};
 
     for (final trigger in triggers) {
-      if (trigger.kind != BattleTriggerKind.roadCollision) continue;
       final nodeId = trigger.location.id;
-      if (existingBattleNodeIds.contains(nodeId)) continue;
 
-      // Partition company IDs into attacker/defender sides.
+      // Reinforcement: if a battle already exists at this node, add any new
+      // companies (not yet in the battle) as reinforcements on the appropriate side.
+      if (existingBattleNodeIds.contains(nodeId)) {
+        final battleIdx = currentActiveBattles.indexWhere((b) => b.nodeId == nodeId);
+        if (battleIdx < 0) continue;
+        var ab = currentActiveBattles[battleIdx];
+
+        // Find companies at this node that do NOT yet have a battleId.
+        final newArrivals = updatedCompanies.where((c) {
+          if (c.currentNode.id != nodeId) return false;
+          if (c.battleId == ab.id) return false; // already in battle
+          if (c.battleId != null) return false;   // in a different battle
+          return true;
+        }).toList();
+
+        for (final newCo in newArrivals) {
+          // Determine side: attacker if ownership matches attackerOwnership, else defender.
+          final side = newCo.ownership == ab.attackerOwnership
+              ? BattleSide.attackers
+              : BattleSide.defenders;
+
+          final updatedBattle = ResolveBattle.addReinforcement(
+            battle: ab.battle,
+            reinforcement: newCo.company,
+            side: side,
+          );
+
+          final newAttackerIds = side == BattleSide.attackers
+              ? [...ab.attackerCompanyIds, newCo.id]
+              : ab.attackerCompanyIds.toList();
+          final newDefenderIds = side == BattleSide.defenders
+              ? [...ab.defenderCompanyIds, newCo.id]
+              : ab.defenderCompanyIds.toList();
+
+          ab = ActiveBattle(
+            nodeId: ab.nodeId,
+            attackerCompanyIds: newAttackerIds,
+            defenderCompanyIds: newDefenderIds,
+            attackerOwnership: ab.attackerOwnership,
+            battle: updatedBattle,
+          );
+        }
+
+        currentActiveBattles[battleIdx] = ab;
+
+        // Tag new arrivals with the battleId.
+        final battleId = ab.id;
+        if (newArrivals.isNotEmpty) {
+          final newArrivalIds = newArrivals.map((c) => c.id).toSet();
+          updatedCompanies = [
+            for (final co in updatedCompanies)
+              if (newArrivalIds.contains(co.id))
+                co.copyWith(battleId: battleId)
+              else
+                co,
+          ];
+        }
+        continue;
+      }
+
+      // New battle — partition companies into attacker/defender sides.
       final involvedCompanies = updatedCompanies
           .where((c) => trigger.companyIds.contains(c.id))
           .toList();
 
-      // Determine attacker side: the first non-player side encountered, or player.
-      // Convention: player companies are defenders when at their own node; otherwise
-      // the smaller ownership set is attackers. Simple rule: pick one side as
-      // attackers, the other as defenders.
-      final ownerships = involvedCompanies.map((c) => c.ownership).toSet();
-      // Pick the first ownership in enum order as attackers.
-      final attackerOwnership = ownerships.first;
-      final defenderOwnership = ownerships.length > 1 ? ownerships.last : ownerships.first;
+      // For castleAssault: the castle owner's companies are defenders; attackers are enemies.
+      // For roadCollision: pick first ownership as attackers.
+      final Ownership attackerOwnership;
+      final List<String> attackerIds;
+      final List<String> defenderIds;
 
-      final attackerIds = involvedCompanies
-          .where((c) => c.ownership == attackerOwnership)
-          .map((c) => c.id)
-          .toList();
-      final defenderIds = involvedCompanies
-          .where((c) => c.ownership != attackerOwnership || ownerships.length == 1)
-          .where((c) => !attackerIds.contains(c.id) || ownerships.length == 1)
-          .map((c) => c.id)
-          .toList();
+      if (trigger.kind == BattleTriggerKind.castleAssault &&
+          trigger.location is CastleNode) {
+        final castleNode = trigger.location as CastleNode;
+        // Attackers = companies that are enemies of the castle owner
+        final attackers = involvedCompanies
+            .where((c) => CheckCollisions.isEnemy(c.ownership, castleNode.ownership))
+            .toList();
+        final defenders = involvedCompanies
+            .where((c) => c.ownership == castleNode.ownership)
+            .toList();
+
+        if (attackers.isEmpty || defenders.isEmpty) continue;
+
+        attackerOwnership = attackers.first.ownership;
+        attackerIds = attackers.map((c) => c.id).toList();
+        defenderIds = defenders.map((c) => c.id).toList();
+      } else {
+        // roadCollision
+        final ownerships = involvedCompanies.map((c) => c.ownership).toSet();
+        attackerOwnership = ownerships.first;
+        attackerIds = involvedCompanies
+            .where((c) => c.ownership == attackerOwnership)
+            .map((c) => c.id)
+            .toList();
+        defenderIds = involvedCompanies
+            .where((c) => !attackerIds.contains(c.id))
+            .map((c) => c.id)
+            .toList();
+      }
 
       final attackerCompanies = involvedCompanies
           .where((c) => attackerIds.contains(c.id))
@@ -150,7 +254,9 @@ final class TickMatch {
         battle: Battle(
           attackers: attackerCompanies,
           defenders: defenderCompanies,
-          kind: BattleKind.roadCollision,
+          kind: trigger.kind == BattleTriggerKind.castleAssault
+              ? BattleKind.castleAssault
+              : BattleKind.roadCollision,
         ),
       );
       currentActiveBattles.add(newBattle);
@@ -190,38 +296,62 @@ final class TickMatch {
       if (ab.battle.outcome == null) continue;
       resolvedBattleIds.add(ab.id);
 
-      // Determine surviving side companies from the final Battle state.
       final outcome = ab.battle.outcome!;
-      final survivingCompanyIds = <String>{};
-      if (outcome == BattleOutcome.attackersWin || outcome == BattleOutcome.draw) {
-        for (final id in ab.attackerCompanyIds) {
-          survivingCompanyIds.add(id);
-        }
-      }
-      if (outcome == BattleOutcome.defendersWin || outcome == BattleOutcome.draw) {
-        for (final id in ab.defenderCompanyIds) {
-          survivingCompanyIds.add(id);
+
+      // Castle ownership transfer for castleAssault battles.
+      // Only transfer on attackersWin — never on draw or defendersWin (FR-024).
+      if (ab.battle.kind == BattleKind.castleAssault &&
+          outcome == BattleOutcome.attackersWin) {
+        final castleIdx =
+            updatedCastles.indexWhere((c) => c.id == ab.nodeId);
+        if (castleIdx >= 0) {
+          updatedCastles = List<Castle>.from(updatedCastles)
+            ..[castleIdx] =
+                updatedCastles[castleIdx].copyWith(ownership: ab.attackerOwnership);
         }
       }
 
-      // Update surviving companies with final battle composition and clear battleId.
-      // Build a map from company index in Battle to surviving Company objects.
-      final allBattleCompanies = [
-        ...ab.battle.attackers.asMap().entries.map((e) => (ab.attackerCompanyIds, e)),
-        ...ab.battle.defenders.asMap().entries.map((e) => (ab.defenderCompanyIds, e)),
-      ];
+      // Build maps for surviving and eliminated companies.
+      // Surviving companies get their composition updated from the final Battle state.
+      // Eliminated companies are zeroed out so the zero-soldier filter removes them.
+      final updatedById = <String, Company>{}; // surviving: updated composition
+      final eliminatedIds = <String>{};        // eliminated: will be zeroed
 
-      final updatedById = <String, Company>{};
-      for (final (ids, entry) in allBattleCompanies) {
-        if (entry.key < ids.length) {
-          updatedById[ids[entry.key]] = entry.value;
+      if (outcome == BattleOutcome.attackersWin) {
+        // Attackers survive — update their composition from final Battle.attackers
+        for (final entry in ab.battle.attackers.asMap().entries) {
+          if (entry.key < ab.attackerCompanyIds.length) {
+            updatedById[ab.attackerCompanyIds[entry.key]] = entry.value;
+          }
         }
+        // Defenders are eliminated
+        eliminatedIds.addAll(ab.defenderCompanyIds);
+      } else if (outcome == BattleOutcome.defendersWin) {
+        // Defenders survive — update their composition from final Battle.defenders
+        for (final entry in ab.battle.defenders.asMap().entries) {
+          if (entry.key < ab.defenderCompanyIds.length) {
+            updatedById[ab.defenderCompanyIds[entry.key]] = entry.value;
+          }
+        }
+        // Attackers are eliminated
+        eliminatedIds.addAll(ab.attackerCompanyIds);
+      } else {
+        // Draw — both sides eliminated
+        eliminatedIds.addAll(ab.attackerCompanyIds);
+        eliminatedIds.addAll(ab.defenderCompanyIds);
       }
 
       updatedCompanies = [
         for (final co in updatedCompanies)
           if (co.battleId == ab.id)
             () {
+              if (eliminatedIds.contains(co.id)) {
+                // Eliminated — zero out composition so zero-soldier filter removes it.
+                return co.copyWith(
+                  company: Company(composition: {}),
+                  battleId: null,
+                );
+              }
               final finalCompany = updatedById[co.id];
               if (finalCompany != null) {
                 return co.copyWith(
@@ -229,6 +359,7 @@ final class TickMatch {
                   battleId: null,
                 );
               }
+              // Fallback: clear battleId without changing composition.
               return co.copyWith(battleId: null);
             }()
           else
