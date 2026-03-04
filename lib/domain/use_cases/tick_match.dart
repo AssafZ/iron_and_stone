@@ -1,12 +1,16 @@
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
+import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/rules/ai_controller.dart';
+import 'package:iron_and_stone/domain/rules/battle_engine.dart';
 import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 
 // Re-export MatchOutcome so existing importers of tick_match.dart are unaffected.
 export 'package:iron_and_stone/domain/rules/victory_checker.dart'
@@ -21,11 +25,15 @@ final class TickResult {
   /// Non-null when a [MatchOutcome] has been determined this tick.
   final MatchOutcome? matchOutcome;
 
+  /// The list of [ActiveBattle]s after this tick (new + ongoing; resolved removed).
+  final List<ActiveBattle> activeBattles;
+
   const TickResult({
     required this.castles,
     required this.companies,
     required this.battleTriggers,
     this.matchOutcome,
+    this.activeBattles = const [],
   });
 }
 
@@ -50,6 +58,7 @@ final class TickMatch {
     required Match match,
     required List<Castle> castles,
     required List<CompanyOnMap> companies,
+    required List<ActiveBattle> activeBattles,
   }) {
     // 1. Reinforce companies stationed at a castle by growing soldiers directly.
     // Castles have no garrison pool — soldiers grow in place within companies.
@@ -61,7 +70,7 @@ final class TickMatch {
     var updatedCompanies = reinforceResult.$1;
     updatedCastles = reinforceResult.$2;
 
-    // 3. Advance company positions
+    // 3. Advance company positions (frozen companies are skipped inside _advance)
     updatedCompanies = _advanceCompanies(updatedCompanies, match);
 
     // 4. AI decision and application
@@ -86,6 +95,159 @@ final class TickMatch {
       companies: updatedCompanies,
     );
 
+    // ---------------------------------------------------------------------------
+    // Phase A: process new roadCollision triggers — create ActiveBattles + tag companies
+    // ---------------------------------------------------------------------------
+    var currentActiveBattles = List<ActiveBattle>.from(activeBattles);
+    final existingBattleNodeIds = {for (final b in currentActiveBattles) b.nodeId};
+
+    for (final trigger in triggers) {
+      if (trigger.kind != BattleTriggerKind.roadCollision) continue;
+      final nodeId = trigger.location.id;
+      if (existingBattleNodeIds.contains(nodeId)) continue;
+
+      // Partition company IDs into attacker/defender sides.
+      final involvedCompanies = updatedCompanies
+          .where((c) => trigger.companyIds.contains(c.id))
+          .toList();
+
+      // Determine attacker side: the first non-player side encountered, or player.
+      // Convention: player companies are defenders when at their own node; otherwise
+      // the smaller ownership set is attackers. Simple rule: pick one side as
+      // attackers, the other as defenders.
+      final ownerships = involvedCompanies.map((c) => c.ownership).toSet();
+      // Pick the first ownership in enum order as attackers.
+      final attackerOwnership = ownerships.first;
+      final defenderOwnership = ownerships.length > 1 ? ownerships.last : ownerships.first;
+
+      final attackerIds = involvedCompanies
+          .where((c) => c.ownership == attackerOwnership)
+          .map((c) => c.id)
+          .toList();
+      final defenderIds = involvedCompanies
+          .where((c) => c.ownership != attackerOwnership || ownerships.length == 1)
+          .where((c) => !attackerIds.contains(c.id) || ownerships.length == 1)
+          .map((c) => c.id)
+          .toList();
+
+      final attackerCompanies = involvedCompanies
+          .where((c) => attackerIds.contains(c.id))
+          .map((c) => c.company)
+          .toList();
+      final defenderCompanies = involvedCompanies
+          .where((c) => defenderIds.contains(c.id))
+          .map((c) => c.company)
+          .toList();
+
+      // Ensure both sides are non-empty (safety guard).
+      if (attackerCompanies.isEmpty || defenderCompanies.isEmpty) continue;
+
+      final newBattle = ActiveBattle(
+        nodeId: nodeId,
+        attackerCompanyIds: attackerIds,
+        defenderCompanyIds: defenderIds,
+        attackerOwnership: attackerOwnership,
+        battle: Battle(
+          attackers: attackerCompanies,
+          defenders: defenderCompanies,
+          kind: BattleKind.roadCollision,
+        ),
+      );
+      currentActiveBattles.add(newBattle);
+      existingBattleNodeIds.add(nodeId);
+
+      // Tag all involved companies with this battle's id.
+      final battleId = newBattle.id;
+      updatedCompanies = [
+        for (final co in updatedCompanies)
+          if (trigger.companyIds.contains(co.id))
+            co.copyWith(battleId: battleId)
+          else
+            co,
+      ];
+    }
+
+    // ---------------------------------------------------------------------------
+    // Phase B: advance each unresolved ActiveBattle one round
+    // ---------------------------------------------------------------------------
+    final advancedBattles = <ActiveBattle>[];
+    for (final ab in currentActiveBattles) {
+      if (ab.battle.outcome != null) {
+        // Already resolved — carry forward for Phase C cleanup.
+        advancedBattles.add(ab);
+      } else {
+        final roundResult = const BattleEngine().resolveRound(ab.battle);
+        advancedBattles.add(ab.copyWith(battle: roundResult.updatedBattle));
+      }
+    }
+    currentActiveBattles = advancedBattles;
+
+    // ---------------------------------------------------------------------------
+    // Phase C: post-battle cleanup for resolved ActiveBattles
+    // ---------------------------------------------------------------------------
+    final resolvedBattleIds = <String>{};
+    for (final ab in currentActiveBattles) {
+      if (ab.battle.outcome == null) continue;
+      resolvedBattleIds.add(ab.id);
+
+      // Determine surviving side companies from the final Battle state.
+      final outcome = ab.battle.outcome!;
+      final survivingCompanyIds = <String>{};
+      if (outcome == BattleOutcome.attackersWin || outcome == BattleOutcome.draw) {
+        for (final id in ab.attackerCompanyIds) {
+          survivingCompanyIds.add(id);
+        }
+      }
+      if (outcome == BattleOutcome.defendersWin || outcome == BattleOutcome.draw) {
+        for (final id in ab.defenderCompanyIds) {
+          survivingCompanyIds.add(id);
+        }
+      }
+
+      // Update surviving companies with final battle composition and clear battleId.
+      // Build a map from company index in Battle to surviving Company objects.
+      final allBattleCompanies = [
+        ...ab.battle.attackers.asMap().entries.map((e) => (ab.attackerCompanyIds, e)),
+        ...ab.battle.defenders.asMap().entries.map((e) => (ab.defenderCompanyIds, e)),
+      ];
+
+      final updatedById = <String, Company>{};
+      for (final (ids, entry) in allBattleCompanies) {
+        if (entry.key < ids.length) {
+          updatedById[ids[entry.key]] = entry.value;
+        }
+      }
+
+      updatedCompanies = [
+        for (final co in updatedCompanies)
+          if (co.battleId == ab.id)
+            () {
+              final finalCompany = updatedById[co.id];
+              if (finalCompany != null) {
+                return co.copyWith(
+                  company: finalCompany,
+                  battleId: null,
+                );
+              }
+              return co.copyWith(battleId: null);
+            }()
+          else
+            co,
+      ];
+    }
+
+    // Remove companies with zero total soldiers after battle cleanup.
+    updatedCompanies = [
+      for (final co in updatedCompanies)
+        if (co.company.totalSoldiers.value > 0) co,
+    ];
+
+    // Remove resolved battles from the list.
+    currentActiveBattles = [
+      for (final ab in currentActiveBattles)
+        if (!resolvedBattleIds.contains(ab.id)) ab,
+    ];
+
     // 6. Victory check
     final outcome = _checkVictory(updatedCastles);
 
@@ -94,6 +256,7 @@ final class TickMatch {
       companies: updatedCompanies,
       battleTriggers: triggers,
       matchOutcome: outcome,
+      activeBattles: List.unmodifiable(currentActiveBattles),
     );
   }
 
@@ -297,6 +460,9 @@ final class TickMatch {
   }
 
   CompanyOnMap _advance(CompanyOnMap co, Match match) {
+    // T016: companies locked in a battle do NOT advance.
+    if (co.battleId != null) return co;
+
     if (co.destination == null || co.destination!.id == co.currentNode.id) {
       return co; // stationary or already arrived
     }

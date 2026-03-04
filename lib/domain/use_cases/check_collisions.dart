@@ -155,37 +155,33 @@ final class CheckCollisions {
     for (final nodeGroup in byNode.values) {
       if (nodeGroup.length < 2) continue;
 
-      // Find pairs of opposing Companies on this node
-      final opposing = <CompanyOnMap>[];
-      for (int i = 0; i < nodeGroup.length; i++) {
-        for (int j = i + 1; j < nodeGroup.length; j++) {
-          final a = nodeGroup[i];
-          final b = nodeGroup[j];
-          if (_isEnemy(a.ownership, b.ownership)) {
-            opposing.add(a);
-            opposing.add(b);
+      // Determine if any two companies on this node are enemies.
+      // Collect ALL companies that have at least one enemy present.
+      bool hasAnyEnemy = false;
+      for (int i = 0; i < nodeGroup.length && !hasAnyEnemy; i++) {
+        for (int j = i + 1; j < nodeGroup.length && !hasAnyEnemy; j++) {
+          if (_isEnemy(nodeGroup[i].ownership, nodeGroup[j].ownership)) {
+            hasAnyEnemy = true;
           }
         }
       }
-      if (opposing.isEmpty) continue;
-
-      // Deduplicate by id
-      final seen = <String>{};
-      final unique = opposing.where((c) => seen.add(c.id)).toList();
+      if (!hasAnyEnemy) continue;
 
       final node = nodeGroup.first.currentNode;
-      // Skip if this is already covered by a castleAssault trigger at this node
+      // Skip if this is already covered by a castleAssault trigger at this node.
       final alreadyCastleAssault = triggers.any(
         (t) =>
             t.kind == BattleTriggerKind.castleAssault &&
             t.location.id == node.id,
       );
       if (!alreadyCastleAssault) {
+        // Emit ONE trigger per node containing ALL companies present
+        // (regardless of ownership mix — the battle loop sorts sides out).
         triggers.add(
           BattleTrigger(
             kind: BattleTriggerKind.roadCollision,
             location: node,
-            companyIds: unique.map((c) => c.id).toList(),
+            companyIds: nodeGroup.map((c) => c.id).toList(),
           ),
         );
       }

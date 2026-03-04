@@ -1,4 +1,5 @@
 import 'package:iron_and_stone/data/drift/match_dao.dart';
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
@@ -17,11 +18,15 @@ final class MatchState {
   final List<CompanyOnMap> companies;
   final MatchOutcome? matchOutcome;
 
+  /// The currently active battles (empty when no battles are in progress).
+  final List<ActiveBattle> activeBattles;
+
   const MatchState({
     required this.match,
     required this.castles,
     required this.companies,
     this.matchOutcome,
+    this.activeBattles = const [],
   });
 
   MatchState copyWith({
@@ -29,12 +34,14 @@ final class MatchState {
     List<Castle>? castles,
     List<CompanyOnMap>? companies,
     MatchOutcome? matchOutcome,
+    List<ActiveBattle>? activeBattles,
   }) {
     return MatchState(
       match: match ?? this.match,
       castles: castles ?? this.castles,
       companies: companies ?? this.companies,
       matchOutcome: matchOutcome ?? this.matchOutcome,
+      activeBattles: activeBattles ?? this.activeBattles,
     );
   }
 }
@@ -110,10 +117,13 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
       match: current.match,
       castles: current.castles,
       companies: current.companies,
+      activeBattles: current.activeBattles,
     );
 
-    final newPhase =
-        result.battleTriggers.isNotEmpty ? MatchPhase.inBattle : MatchPhase.playing;
+    final newActiveBattles = result.activeBattles;
+    final newPhase = newActiveBattles.isNotEmpty
+        ? MatchPhase.inBattle
+        : MatchPhase.playing;
 
     state = AsyncData(
       current.copyWith(
@@ -125,6 +135,7 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
         castles: result.castles,
         companies: result.companies,
         matchOutcome: result.matchOutcome,
+        activeBattles: newActiveBattles,
       ),
     );
 

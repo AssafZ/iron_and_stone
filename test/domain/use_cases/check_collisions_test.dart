@@ -488,5 +488,98 @@ void main() {
         },
       );
     });
+
+    // -----------------------------------------------------------------------
+    // T015: same-owner no trigger; 3+ opposing companies → ONE BattleTrigger
+    // -----------------------------------------------------------------------
+
+    group('T015: battle trigger grouping rules', () {
+      test(
+        'T015a: two same-owner companies at the same junction do NOT emit a battle trigger',
+        () {
+          final a = _makeCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+          final b = _makeCompany(
+            id: 'p2',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+          final triggers = useCase.check(map: map, companies: [a, b]);
+          expect(triggers, isEmpty,
+              reason: 'Same-owner companies must never trigger a battle');
+        },
+      );
+
+      test(
+        'T015b: three opposing companies at the same junction produce exactly '
+        'ONE BattleTrigger containing all company IDs',
+        () {
+          // Two player companies + one AI company at same junction
+          final p1 = _makeCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+          final p2 = _makeCompany(
+            id: 'p2',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+          final ai1 = _makeCompany(
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+          );
+
+          final triggers =
+              useCase.check(map: map, companies: [p1, p2, ai1]);
+
+          final roadTriggers = triggers
+              .where((t) => t.kind == BattleTriggerKind.roadCollision)
+              .toList();
+
+          expect(roadTriggers, hasLength(1),
+              reason: 'Must produce exactly ONE roadCollision trigger, not one per pair');
+
+          final ids = roadTriggers.first.companyIds;
+          expect(ids, containsAll(['p1', 'p2', 'ai1']),
+              reason: 'Single trigger must contain all involved company IDs');
+        },
+      );
+
+      test(
+        'T015c: two AI and one player company at same junction → ONE trigger',
+        () {
+          final ai1 = _makeCompany(
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+          );
+          final ai2 = _makeCompany(
+            id: 'ai2',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+          );
+          final p1 = _makeCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+
+          final triggers =
+              useCase.check(map: map, companies: [ai1, ai2, p1]);
+
+          final roadTriggers = triggers
+              .where((t) => t.kind == BattleTriggerKind.roadCollision)
+              .toList();
+
+          expect(roadTriggers, hasLength(1));
+          expect(roadTriggers.first.companyIds, containsAll(['ai1', 'ai2', 'p1']));
+        },
+      );
+    });
   });
 }

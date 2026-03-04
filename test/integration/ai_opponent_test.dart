@@ -64,6 +64,7 @@ List<CompanyOnMap> _buildStartingCompanies(GameMap map) {
       ),
       castles: currentCastles,
       companies: currentCompanies,
+      activeBattles: const [],
     );
     currentCastles = result.castles;
     currentCompanies = result.companies;
@@ -148,6 +149,7 @@ void main() {
         match: match,
         castles: castles,
         companies: companies,
+        activeBattles: const [],
       );
 
       // After one tick, the AI should have received a MoveAction.
