@@ -586,16 +586,23 @@ class _StatRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.stone),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(color: AppTheme.stone),
+            ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: AppTheme.ironDark,
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.ironDark,
+              ),
             ),
           ),
         ],
