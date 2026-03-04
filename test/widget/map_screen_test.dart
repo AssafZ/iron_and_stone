@@ -1,11 +1,17 @@
-// T031 + T037a — Failing widget tests for MapScreen
-// Red-Green-Refactor: these tests must FAIL before implementation exists.
+// T031 + T037a + T036 + T037 — Failing widget tests for MapScreen
+// Red-Green-Refactor: T036 / T037 must FAIL before T039 (BattleIndicator wiring) is complete.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
+import 'package:iron_and_stone/domain/entities/battle.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
+import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
+import 'package:iron_and_stone/ui/widgets/battle_indicator.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -201,5 +207,130 @@ void main() {
         reason: 'At least one AI Company marker should be visible after 3 ticks',
       );
     });
+
+    // T036 — map screen renders a BattleIndicator for each ActiveBattle in MatchState
+    testWidgets(
+        'renders a BattleIndicator for each entry in MatchState.activeBattles',
+        (tester) async {
+      // Build a minimal MatchState with one ActiveBattle at node j1.
+      final activeBattle = ActiveBattle(
+        nodeId: 'j1',
+        attackerCompanyIds: const ['player_co0'],
+        defenderCompanyIds: const ['ai_co0'],
+        attackerOwnership: Ownership.player,
+        battle: Battle(
+          attackers: [Company(composition: {UnitRole.warrior: 5})],
+          defenders: [Company(composition: {UnitRole.warrior: 5})],
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() {
+              final notifier = _FakeMatchNotifier(activeBattles: [activeBattle]);
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: MapScreen()),
+        ),
+      );
+      // Use pump() with a short duration to let the async build complete
+      // without advancing fake time enough to trigger the 10-second game loop.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // One BattleIndicator must appear for the single active battle.
+      expect(find.byType(BattleIndicator), findsOneWidget);
+    });
+
+    // T037 — map screen removes BattleIndicator when ActiveBattle is gone
+    testWidgets(
+        'removes BattleIndicator when the corresponding ActiveBattle is gone from MatchState.activeBattles',
+        (tester) async {
+      final activeBattle = ActiveBattle(
+        nodeId: 'j1',
+        attackerCompanyIds: const ['player_co0'],
+        defenderCompanyIds: const ['ai_co0'],
+        attackerOwnership: Ownership.player,
+        battle: Battle(
+          attackers: [Company(composition: {UnitRole.warrior: 5})],
+          defenders: [Company(composition: {UnitRole.warrior: 5})],
+        ),
+      );
+
+      // Start with one active battle.
+      final controller = _ControllableMatchNotifier(activeBattles: [activeBattle]);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => controller),
+          ],
+          child: const MaterialApp(home: MapScreen()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Battle indicator is visible.
+      expect(find.byType(BattleIndicator), findsOneWidget);
+
+      // Resolve the battle — remove it from activeBattles.
+      controller.clearBattles();
+      await tester.pump();
+
+      // BattleIndicator must be gone.
+      expect(find.byType(BattleIndicator), findsNothing);
+    });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+/// A minimal fake [MatchNotifier] that immediately returns a [MatchState] with
+/// a pre-set [activeBattles] list. Used for T036 / T037.
+///
+/// Builds from scratch (no DB hit) by calling the static
+/// [MatchNotifier._buildInitialState] logic inline so the returned state
+/// always carries the fixture map (node IDs like 'j1' are known to exist).
+class _FakeMatchNotifier extends MatchNotifier {
+  final List<ActiveBattle> _activeBattles;
+
+  _FakeMatchNotifier({required List<ActiveBattle> activeBattles})
+      : _activeBattles = activeBattles;
+
+  @override
+  Future<MatchState> build() async {
+    // Call through to parent which loads the initial game state (no DB in tests)
+    // then inject activeBattles.
+    final base = await super.build();
+    return base.copyWith(activeBattles: _activeBattles);
+  }
+}
+
+/// A [MatchNotifier] subclass whose active battles can be mutated post-build,
+/// used by T037 to simulate a battle being resolved.
+class _ControllableMatchNotifier extends MatchNotifier {
+  List<ActiveBattle> _activeBattles;
+
+  _ControllableMatchNotifier({required List<ActiveBattle> activeBattles})
+      : _activeBattles = activeBattles;
+
+  @override
+  Future<MatchState> build() async {
+    final base = await super.build();
+    return base.copyWith(activeBattles: _activeBattles);
+  }
+
+  /// Remove all active battles and update the state so watchers rebuild.
+  void clearBattles() {
+    _activeBattles = const [];
+    final current = state.valueOrNull;
+    if (current != null) {
+      state = AsyncData(current.copyWith(activeBattles: const []));
+    }
+  }
 }

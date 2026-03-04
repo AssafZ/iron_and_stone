@@ -8,8 +8,19 @@ import 'package:iron_and_stone/ui/widgets/battle_side_view.dart';
 ///
 /// Shows both sides via [BattleSideView], a "Next Round" button,
 /// and transitions to an inline summary once the battle is resolved.
+///
+/// The optional [battleId] parameter identifies which [ActiveBattle] from
+/// [MatchState.activeBattles] this screen is displaying. When provided, the
+/// screen will derive battle state from [matchNotifierProvider] in Phase 6.
+/// Currently the screen falls back to the global [battleNotifierProvider]
+/// so existing tests remain unaffected.
 final class BattleScreen extends ConsumerWidget {
-  const BattleScreen({super.key});
+  /// Identifies the active battle. Used by [MapScreen] to open the correct
+  /// battle when there are multiple simultaneous battles in progress.
+  /// Full wiring is implemented in Phase 6 (T043–T045).
+  final String? battleId;
+
+  const BattleScreen({super.key, this.battleId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

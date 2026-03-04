@@ -151,15 +151,15 @@ implemented. Nothing in Phase 3+ can start until this phase is complete.
 
 ### Tests for User Story 3 (TDD — write before implementation)
 
-- [ ] T034 [P] Write **failing** widget test: `BattleIndicator` renders with minimum 44×44 pt tap target — create `test/widget/battle_indicator_test.dart`
-- [ ] T035 [P] Write **failing** widget test: `BattleIndicator.onTap` callback fires when indicator is tapped — in `test/widget/battle_indicator_test.dart`
-- [ ] T036 Write **failing** widget test: map screen renders a `BattleIndicator` for each entry in `MatchState.activeBattles` — extend `test/widget/map_screen_test.dart` (create file if it does not exist)
-- [ ] T037 Write **failing** widget test: map screen removes `BattleIndicator` when the corresponding `ActiveBattle` is gone from `MatchState.activeBattles` — extend `test/widget/map_screen_test.dart`
+- [X] T034 [P] Write **failing** widget test: `BattleIndicator` renders with minimum 44×44 pt tap target — create `test/widget/battle_indicator_test.dart`
+- [X] T035 [P] Write **failing** widget test: `BattleIndicator.onTap` callback fires when indicator is tapped — in `test/widget/battle_indicator_test.dart`
+- [X] T036 Write **failing** widget test: map screen renders a `BattleIndicator` for each entry in `MatchState.activeBattles` — extend `test/widget/map_screen_test.dart` (create file if it does not exist)
+- [X] T037 Write **failing** widget test: map screen removes `BattleIndicator` when the corresponding `ActiveBattle` is gone from `MatchState.activeBattles` — extend `test/widget/map_screen_test.dart`
 
 ### Implementation for User Story 3
 
-- [ ] T038 [P] Create `BattleIndicator` widget — new file `lib/ui/widgets/battle_indicator.dart`; `StatefulWidget` with `battleId` (`String`) and `onTap` (`VoidCallback`) params; `AnimationController` with `repeat(reverse: true)` for pulse animation; `SingleTickerProviderStateMixin`; outer `SizedBox(44, 44)`; `RepaintBoundary` wrapping animated child; crossed-swords icon with pulsing red overlay; confirm T034 and T035 turn green
-- [ ] T039 Wire `BattleIndicator` into `MapScreen` in `lib/ui/screens/map_screen.dart`: watch `matchState.activeBattles`; in the map `Stack`, after company markers, add one `Positioned` `BattleIndicator` per active battle using `_nodeCanvasPos(nodeId)` for coordinates; `onTap` placeholder (wired in Phase 6); suppress normal company markers for companies with `battleId != null`; confirm T036 and T037 turn green
+- [X] T038 [P] Create `BattleIndicator` widget — new file `lib/ui/widgets/battle_indicator.dart`; `StatefulWidget` with `battleId` (`String`) and `onTap` (`VoidCallback`) params; `AnimationController` with `repeat(reverse: true)` for pulse animation; `SingleTickerProviderStateMixin`; outer `SizedBox(44, 44)`; `RepaintBoundary` wrapping animated child; crossed-swords icon with pulsing red overlay; confirm T034 and T035 turn green
+- [X] T039 Wire `BattleIndicator` into `MapScreen` in `lib/ui/screens/map_screen.dart`: watch `matchState.activeBattles`; in the map `Stack`, after company markers, add one `Positioned` `BattleIndicator` per active battle using `_nodeCanvasPos(nodeId)` for coordinates; `onTap` placeholder (wired in Phase 6); suppress normal company markers for companies with `battleId != null`; confirm T036 and T037 turn green
 
 **Checkpoint**: Battle indicator is fully visible on the map during any active battle, correctly anchored to the battle node, and removed when the battle resolves. Golden screenshot can be taken here to lock in visual regression baseline.
 

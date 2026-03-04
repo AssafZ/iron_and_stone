@@ -9,8 +9,10 @@ import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
+import 'package:iron_and_stone/ui/screens/battle_screen.dart';
 import 'package:iron_and_stone/ui/screens/castle_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
+import 'package:iron_and_stone/ui/widgets/battle_indicator.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
 import 'package:iron_and_stone/ui/widgets/map_node_widget.dart';
 import 'package:iron_and_stone/ui/widgets/split_slider.dart';
@@ -365,7 +367,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // so every marker has its own 44 × 44 pt tap target
                   // (FR-001, FR-003). slotMap is rebuilt each frame so it
                   // stays in sync after tick-driven movement.
-                  ...companies.map((co) {
+                  //
+                  // Companies in an active battle (battleId != null) are
+                  // suppressed here; the BattleIndicator at their node
+                  // represents them while the battle is in progress.
+                  ...companies
+                      .where((co) => co.battleId == null)
+                      .map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
                     final (ox, oy) = _offsetForCompany(co, slotMap);
@@ -387,6 +395,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           onLongPress: co.ownership == Ownership.player
                               ? () => _onCompanyLongPress(context, co)
                               : null,
+                        ),
+                      ),
+                    );
+                  }),
+                  // Battle indicators — one per active battle, anchored to the
+                  // battle node's canvas coordinates. These persist across pan
+                  // and zoom because they are children of the same SizedBox
+                  // that all other map elements live in.
+                  ...matchState.activeBattles.map((ab) {
+                    final node = matchState.match.map.nodes
+                        .where((n) => n.id == ab.nodeId)
+                        .firstOrNull;
+                    if (node == null) return const SizedBox.shrink();
+                    final (cx, cy) = _nodeCanvasPos(node);
+                    return Positioned(
+                      key: ValueKey('battle_indicator_${ab.id}'),
+                      left: cx - 22,
+                      top: cy - 22,
+                      child: BattleIndicator(
+                        battleId: ab.id,
+                        onTap: () => Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BattleScreen(battleId: ab.id),
+                          ),
                         ),
                       ),
                     );
