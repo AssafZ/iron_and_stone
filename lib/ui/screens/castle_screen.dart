@@ -203,32 +203,28 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: SplitSlider(
-          key: ValueKey('castle_split_slider_${co.id}'),
-          company: co,
-          onConfirm: (splitMap) async {
-            Navigator.of(ctx).pop();
-            try {
-              await ref
-                  .read(companyNotifierProvider.notifier)
-                  .splitCompany(co.id, splitMap);
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Split failed: $e')),
-                );
-              }
+      builder: (ctx) => SplitSlider(
+        key: ValueKey('castle_split_slider_${co.id}'),
+        company: co,
+        onConfirm: (splitMap) async {
+          Navigator.of(ctx).pop();
+          try {
+            await ref
+                .read(companyNotifierProvider.notifier)
+                .splitCompany(co.id, splitMap);
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Split failed: $e')),
+              );
             }
-          },
-        ),
+          }
+        },
       ),
     );
   }

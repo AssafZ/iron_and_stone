@@ -498,24 +498,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: SplitSlider(
-          key: ValueKey('split_slider_${co.id}'),
-          company: co,
-          onConfirm: (splitMap) {
-            Navigator.of(ctx).pop();
-            ref
-                .read(companyNotifierProvider.notifier)
-                .splitCompany(co.id, splitMap);
-          },
-        ),
+      builder: (ctx) => SplitSlider(
+        key: ValueKey('split_slider_${co.id}'),
+        company: co,
+        onConfirm: (splitMap) {
+          Navigator.of(ctx).pop();
+          ref
+              .read(companyNotifierProvider.notifier)
+              .splitCompany(co.id, splitMap);
+        },
       ),
     );
   }
