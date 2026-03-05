@@ -1,38 +1,103 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/state/battle_notifier.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/widgets/battle_side_view.dart';
 
 /// Full-screen battle view.
 ///
-/// Shows both sides via [BattleSideView], a "Next Round" button,
-/// and transitions to an inline summary once the battle is resolved.
+/// When [battleId] is provided the screen watches [matchNotifierProvider] and
+/// derives its state from the matching [ActiveBattle].  Once the battle is
+/// resolved (removed from `activeBattles`) the screen transitions to
+/// [_BattleSummary] using the last-known [Battle] snapshot stored in local
+/// widget state.
 ///
-/// The optional [battleId] parameter identifies which [ActiveBattle] from
-/// [MatchState.activeBattles] this screen is displaying. When provided, the
-/// screen will derive battle state from [matchNotifierProvider] in Phase 6.
-/// Currently the screen falls back to the global [battleNotifierProvider]
-/// so existing tests remain unaffected.
-final class BattleScreen extends ConsumerWidget {
-  /// Identifies the active battle. Used by [MapScreen] to open the correct
-  /// battle when there are multiple simultaneous battles in progress.
-  /// Full wiring is implemented in Phase 6 (T043–T045).
+/// When [battleId] is `null` the screen falls back to the legacy
+/// [battleNotifierProvider] so existing tests continue to pass.
+final class BattleScreen extends ConsumerStatefulWidget {
+  /// Identifies the active battle in [MatchState.activeBattles].
   final String? battleId;
 
   const BattleScreen({super.key, this.battleId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BattleScreen> createState() => _BattleScreenState();
+}
+
+final class _BattleScreenState extends ConsumerState<BattleScreen> {
+  /// Last known battle snapshot — used by [_BattleSummary] after the
+  /// [ActiveBattle] is removed from state on resolution.
+  Battle? _lastBattle;
+
+  @override
+  Widget build(BuildContext context) {
+    final battleId = widget.battleId;
+
+    // ── matchNotifier path (T043) ───────────────────────────────────────────
+    if (battleId != null) {
+      final matchAsync = ref.watch(matchNotifierProvider);
+      return matchAsync.when(
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (e, _) =>
+            Scaffold(body: Center(child: Text('Error: $e'))),
+        data: (matchState) {
+          final activeBattle = matchState.activeBattles
+              .firstWhereOrNull((b) => b.id == battleId);
+
+          if (activeBattle != null) {
+            // Cache the live battle so we can show it in _BattleSummary after
+            // the battle is resolved.
+            _lastBattle = activeBattle.battle;
+          }
+
+          // Battle resolved (T042) — show summary using last-known snapshot.
+          if (activeBattle == null) {
+            final snapshot = _lastBattle;
+            if (snapshot != null) {
+              return _BattleSummary(
+                  battle: snapshot,
+                  result: snapshot.outcome ?? BattleOutcome.draw);
+            }
+            // Fallback if we never saw the battle (shouldn't happen in practice).
+            return const Scaffold(
+              body: Center(child: Text('Battle not found')),
+            );
+          }
+
+          final battle = activeBattle.battle;
+          return _buildBattleScaffold(
+            battle: battle,
+            onNextRound: () => ref
+                .read(matchNotifierProvider.notifier)
+                .advanceBattleRound(battleId),
+          );
+        },
+      );
+    }
+
+    // ── Legacy battleNotifierProvider path (existing tests) ─────────────────
     final battleState = ref.watch(battleNotifierProvider);
     final battle = battleState.battle;
     final result = battleState.result;
 
-    // Battle resolved — show summary
     if (result != null) {
       return _BattleSummary(battle: battle, result: result);
     }
 
+    return _buildBattleScaffold(
+      battle: battle,
+      onNextRound: () =>
+          ref.read(battleNotifierProvider.notifier).advanceRound(),
+    );
+  }
+
+  Widget _buildBattleScaffold({
+    required Battle battle,
+    required VoidCallback onNextRound,
+  }) {
     return Scaffold(
       backgroundColor: const Color(0xFF1B1B2F),
       appBar: AppBar(
@@ -76,8 +141,7 @@ final class BattleScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () =>
-                      ref.read(battleNotifierProvider.notifier).advanceRound(),
+                  onPressed: onNextRound,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4A148C),
                     foregroundColor: Colors.white,

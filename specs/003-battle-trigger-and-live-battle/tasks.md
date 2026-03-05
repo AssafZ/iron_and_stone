@@ -173,16 +173,16 @@ implemented. Nothing in Phase 3+ can start until this phase is complete.
 
 ### Tests for User Story 4 (TDD — write before implementation)
 
-- [ ] T040 [P] Write **failing** widget test: `BattleScreen` shows the correct attacker and defender companies for a given `battleId` — extend `test/widget/battle_screen_test.dart`
-- [ ] T041 [P] Write **failing** widget test: tapping "Next Round" calls `MatchNotifier.advanceBattleRound` with the correct `battleId` — extend `test/widget/battle_screen_test.dart`
-- [ ] T042 [P] Write **failing** widget test: `BattleScreen` shows `_BattleSummary` when the `ActiveBattle` for its `battleId` is no longer in `MatchState.activeBattles` (battle resolved while screen was open) — extend `test/widget/battle_screen_test.dart`
+- [X] T040 [P] Write **failing** widget test: `BattleScreen` shows the correct attacker and defender companies for a given `battleId` — extend `test/widget/battle_screen_test.dart`
+- [X] T041 [P] Write **failing** widget test: tapping "Next Round" calls `MatchNotifier.advanceBattleRound` with the correct `battleId` — extend `test/widget/battle_screen_test.dart`
+- [X] T042 [P] Write **failing** widget test: `BattleScreen` shows `_BattleSummary` when the `ActiveBattle` for its `battleId` is no longer in `MatchState.activeBattles` (battle resolved while screen was open) — extend `test/widget/battle_screen_test.dart`
 
 ### Implementation for User Story 4
 
-- [ ] T043 Add `required String battleId` constructor parameter to `BattleScreen` in `lib/ui/screens/battle_screen.dart`; make the screen watch `matchNotifierProvider` and derive its active battle with `state.activeBattles.firstWhereOrNull((b) => b.id == battleId)`
-- [ ] T044 Implement resolved-battle fallback in `BattleScreen` in `lib/ui/screens/battle_screen.dart`: when `activeBattle == null`, display `_BattleSummary` using the last-known `Battle` snapshot stored in local widget state; confirm T042 turns green
-- [ ] T045 Wire "Next Round" button in `BattleScreen` in `lib/ui/screens/battle_screen.dart`: call `ref.read(matchNotifierProvider.notifier).advanceBattleRound(battleId)`; this call must trigger full post-battle cleanup (zero-soldier removal, `battleId` clear, castle transfer) when the round resolves the battle — verify by confirming T023c's cleanup path is exercised; confirm T041 turns green; confirm T040 turns green
-- [ ] T046 Wire `BattleIndicator.onTap` in `MapScreen` in `lib/ui/screens/map_screen.dart`: on tap call `Navigator.push(context, MaterialPageRoute(builder: (_) => BattleScreen(battleId: ab.id)))` for the tapped battle
+- [X] T043 Add `required String battleId` constructor parameter to `BattleScreen` in `lib/ui/screens/battle_screen.dart`; make the screen watch `matchNotifierProvider` and derive its active battle with `state.activeBattles.firstWhereOrNull((b) => b.id == battleId)`
+- [X] T044 Implement resolved-battle fallback in `BattleScreen` in `lib/ui/screens/battle_screen.dart`: when `activeBattle == null`, display `_BattleSummary` using the last-known `Battle` snapshot stored in local widget state; confirm T042 turns green
+- [X] T045 Wire "Next Round" button in `BattleScreen` in `lib/ui/screens/battle_screen.dart`: call `ref.read(matchNotifierProvider.notifier).advanceBattleRound(battleId)`; this call must trigger full post-battle cleanup (zero-soldier removal, `battleId` clear, castle transfer) when the round resolves the battle — verify by confirming T023c's cleanup path is exercised; confirm T041 turns green; confirm T040 turns green
+- [X] T046 Wire `BattleIndicator.onTap` in `MapScreen` in `lib/ui/screens/map_screen.dart`: on tap call `Navigator.push(context, MaterialPageRoute(builder: (_) => BattleScreen(battleId: ab.id)))` for the tapped battle
 
 **Checkpoint**: Full battle loop is playable. Trigger → indicator → tap → view live battle → advance rounds → summary on resolve → back to map.
 
