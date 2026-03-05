@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 
@@ -43,12 +44,15 @@ class MainMenuScreen extends ConsumerWidget {
               // New Game button
               ElevatedButton(
                 key: const ValueKey('new_game_button'),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const MapScreen(),
-                    ),
-                  );
+                onPressed: () async {
+                  await ref.read(matchNotifierProvider.notifier).newGame();
+                  if (context.mounted) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const MapScreen(),
+                      ),
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.bloodRed,
