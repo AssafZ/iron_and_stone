@@ -192,8 +192,8 @@ implemented. Nothing in Phase 3+ can start until this phase is complete.
 
 **Purpose**: Confirm the entire battle lifecycle (trigger → indicator → tap → advance → resolve → cleanup) works end-to-end in a device/emulator context.
 
-- [ ] T047 Create integration test covering SC-001 through SC-005 (road-junction collision lifecycle) — new file `test/integration/battle_loop_test.dart`
-- [ ] T048 Extend integration test with SC-006 through SC-009 (castle-assault lifecycle and empty-castle capture) — `test/integration/battle_loop_test.dart`
+- [X] T047 Create integration test covering SC-001 through SC-005 (road-junction collision lifecycle) — new file `test/integration/battle_loop_test.dart`
+- [X] T048 Extend integration test with SC-006 through SC-009 (castle-assault lifecycle and empty-castle capture) — `test/integration/battle_loop_test.dart`
 
 ---
 

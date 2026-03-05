@@ -101,6 +101,7 @@ final class BattleEngine {
       roundLog: newLog,
       outcome: outcome,
       highGroundActive: current.highGroundActive,
+      kind: current.kind,
       attackerHp: outcome != null ? null : attackerHp,
       defenderHp: outcome != null ? null : defenderHp,
     );
