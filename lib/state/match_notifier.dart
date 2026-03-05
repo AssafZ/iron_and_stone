@@ -113,6 +113,10 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     final current = state.valueOrNull;
     if (current == null) return null;
 
+    // Do not advance a finished match — game loop should have been stopped by
+    // the UI, but guard here as a safety net.
+    if (current.match.phase == MatchPhase.ended) return null;
+
     // TickMatch now includes AiController decision + application internally,
     // so result.companies may include newly AI-deployed companies.
     final result = const TickMatch().tick(

@@ -11,6 +11,7 @@ import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/battle_screen.dart';
 import 'package:iron_and_stone/ui/screens/castle_screen.dart';
+import 'package:iron_and_stone/ui/screens/game_over_screen.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/battle_indicator.dart';
 import 'package:iron_and_stone/ui/widgets/company_marker.dart';
@@ -215,6 +216,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final matchAsync = ref.watch(matchNotifierProvider);
     final companyAsync = ref.watch(companyNotifierProvider);
+
+    // React to game-over: stop the loop and navigate to GameOverScreen.
+    ref.listen<AsyncValue<MatchState>>(matchNotifierProvider, (prev, next) {
+      final outcome = next.valueOrNull?.matchOutcome;
+      if (outcome != null) {
+        _gameLoopTimer?.cancel();
+        _visualTimer?.cancel();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => GameOverScreen(outcome: outcome),
+            ),
+          );
+        });
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
