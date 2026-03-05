@@ -151,6 +151,8 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     if (idx < 0) return;
 
     final company = sourceList[idx];
+    // T053: blocked — cannot reroute a company that is locked in battle.
+    if (company.battleId != null) return;
     final updated = const MoveCompany().setDestination(
       company: company,
       destination: destination,

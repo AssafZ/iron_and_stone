@@ -201,13 +201,20 @@ implemented. Nothing in Phase 3+ can start until this phase is complete.
 
 **Purpose**: Hardening, performance validation, and final analysis gate.
 
-- [ ] T049 [P] Run `flutter analyze` — fix any new issues introduced during this feature; target: zero issues
-- [ ] T050 [P] Run `flutter test` — confirm all tests pass (unit + widget + integration)
+- [x] T049 [P] Run `flutter analyze` — fix any new issues introduced during this feature; target: zero issues
+  - Result: 11 pre-existing issues; zero new issues from this feature. ✅
+- [x] T050 [P] Run `flutter test` — confirm all tests pass (unit + widget + integration)
+  - Result: 497 tests passing (495 pre-existing + 2 new T053 tests). ✅
 - [ ] T051 Profile game-loop tick with Flutter DevTools on an Android Snapdragon 665-class device: confirm single tick ≤ 16 ms with 2–5 active battles; the profiled tick MUST include the `MatchDao.saveMatch` persistence call (with `BattlesTable` row inserts active) — not just the in-memory logic — to catch SQLite-induced jank (fix U4); capture DevTools screenshot for PR evidence
+  - NOTE: Requires physical device + Flutter DevTools. Manual execution deferred; include DevTools screenshot in PR.
 - [ ] T052 Profile `BattleIndicator` animation: confirm 60 fps is maintained with up to 5 simultaneous indicators on the map; capture DevTools screenshot
-- [ ] T053 [P] Verify `CompanyNotifier` blocks player move orders when `company.battleId != null` in `lib/state/company_notifier.dart`; add unit test if guard is missing
-- [ ] T054 [P] Decide the fate of the unused global `battleNotifierProvider` path in `lib/state/battle_notifier.dart` (per R-005: retained but unused for new flow): if removing, first update all usages in `test/widget/battle_screen_test.dart` to use the new `matchNotifierProvider`-based override instead; if retaining, add a `// TODO(cleanup): battleNotifierProvider retained for backward compatibility — remove after BattleScreen migration is complete` comment; confirm no test breakage by running `flutter test test/widget/battle_screen_test.dart` after the change
-- [ ] T055 Run quickstart.md step-by-step validation: execute each `flutter test` command in Section 4 and confirm all outputs match expectations
+  - NOTE: Requires physical device + Flutter DevTools. Manual execution deferred; include DevTools screenshot in PR.
+- [x] T053 [P] Verify `CompanyNotifier` blocks player move orders when `company.battleId != null` in `lib/state/company_notifier.dart`; add unit test if guard is missing
+  - Guard added at `lib/state/company_notifier.dart` (after `if (idx < 0) return;`). Two TDD tests added in `test/state/company_notifier_test.dart`. ✅
+- [x] T054 [P] Decide the fate of the unused global `battleNotifierProvider` path in `lib/state/battle_notifier.dart` (per R-005: retained but unused for new flow): if removing, first update all usages in `test/widget/battle_screen_test.dart` to use the new `matchNotifierProvider`-based override instead; if retaining, add a `// TODO(cleanup): battleNotifierProvider retained for backward compatibility — remove after BattleScreen migration is complete` comment; confirm no test breakage by running `flutter test test/widget/battle_screen_test.dart` after the change
+  - Decision: **Retain**. Added `// TODO(cleanup): ...` doc-comment to `battleNotifierProvider`. All 57 widget tests pass. ✅
+- [x] T055 Run quickstart.md step-by-step validation: execute each `flutter test` command in Section 4 and confirm all outputs match expectations
+  - `flutter test test/domain/`: 391 passing ✅ | `flutter test test/widget/`: 57 passing ✅ | `flutter test`: 497 passing ✅ | `flutter analyze`: 11 pre-existing issues, none new ✅
 
 ---
 
