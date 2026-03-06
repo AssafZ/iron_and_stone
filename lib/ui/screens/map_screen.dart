@@ -54,22 +54,36 @@ const List<(double, double)> _kSlotOffsets = [
 /// so the slot order is deterministic across every render frame — no transient
 /// arrival-order state is needed.
 ///
+/// When [pinnedId] is provided (the currently selected company), that company
+/// is placed in slot 0 (the centre) at its node. This makes the selected/front
+/// company visually "on top" and easiest to tap.
+///
 /// This is called once per [_buildMap] frame and the result is passed to
 /// [_offsetForCompany] for each company, keeping slot assignment consistent
 /// within a frame.
-Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
+Map<String, List<String>> _buildSlotMap(
+  List<CompanyOnMap> companies, {
+  String? pinnedId,
+}) {
   final map = <String, List<String>>{};
   for (final co in companies) {
-    final isStationary = co.destination == null ||
+    // Companies frozen in a battle are stationary at their currentNode even
+    // though their destination field may still be set from before the collision.
+    final isStationary = co.battleId != null ||
+        co.destination == null ||
         co.destination!.id == co.currentNode.id;
     if (!isStationary) continue;
-    // Companies inside a castle are rendered at the castle centre (no offset).
-    if (co.currentNode is CastleNode) continue;
     map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
   }
-  // Sort each node's list by id so order is stable across rebuilds.
-  for (final ids in map.values) {
+  // Sort each node's list by id so order is stable across rebuilds,
+  // then promote pinnedId to slot 0 if present.
+  for (final entry in map.entries) {
+    final ids = entry.value;
     ids.sort();
+    if (pinnedId != null && ids.contains(pinnedId)) {
+      ids.remove(pinnedId);
+      ids.insert(0, pinnedId);
+    }
   }
   return map;
 }
@@ -79,12 +93,15 @@ Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
 ///
 /// In-transit companies (destination ≠ currentNode) always return `(0, 0)`
 /// because their visual position is interpolated along the road — not snapped
-/// to a node slot.
+/// to a node slot. Companies frozen in a battle are treated as stationary at
+/// currentNode even if destination is still set.
 (double, double) _offsetForCompany(
   CompanyOnMap company,
   Map<String, List<String>> slotMap,
 ) {
-  if (company.destination != null &&
+  // Battling companies are frozen at currentNode — always use slot offset.
+  if (company.battleId == null &&
+      company.destination != null &&
       company.destination!.id != company.currentNode.id) {
     return (0.0, 0.0);
   }
@@ -303,7 +320,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // Build the slot map from the authoritative match-state company list so
     // offsets are always correct — even after tick-driven movement where
     // companies arrive at nodes without going through CompanyNotifier actions.
-    final slotMap = _buildSlotMap(companies);
+    // The selected company is pinned to slot 0 so it renders at the centre
+    // and is easiest to tap after being chosen in the castle screen.
+    final slotMap = _buildSlotMap(companies, pinnedId: selectedId);
 
     return Column(
       children: [
@@ -386,11 +405,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // (FR-001, FR-003). slotMap is rebuilt each frame so it
                   // stays in sync after tick-driven movement.
                   //
-                  // Companies in an active battle (battleId != null) are
-                  // suppressed here; the BattleIndicator at their node
-                  // represents them while the battle is in progress.
+                  // Companies frozen in a battle (battleId != null) are also
+                  // rendered here with offset slots so opposing companies
+                  // appear side-by-side rather than stacked. The BattleIndicator
+                  // is rendered on top as a separate overlay.
                   ...companies
-                      .where((co) => co.battleId == null)
                       .map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
@@ -835,6 +854,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   /// plus the elapsed wall-clock time since that tick to extrapolate where the
   /// marker should be rendered right now — giving smooth continuous movement.
   (double, double) _companyVisualPos(CompanyOnMap co, MatchState matchState) {
+    // Companies frozen in a battle are stationary at currentNode even if their
+    // destination field is still set from before the collision.
+    if (co.battleId != null) return _nodeCanvasPos(co.currentNode);
+
     final destination = co.destination;
     if (destination == null || destination.id == co.currentNode.id) {
       return _nodeCanvasPos(co.currentNode);

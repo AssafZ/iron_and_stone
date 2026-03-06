@@ -317,6 +317,10 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                       ref
                           .read(companyNotifierProvider.notifier)
                           .selectCompany(co.id);
+                      // Return to map so the player can immediately tap a
+                      // destination node — the selected company marker will be
+                      // pinned to slot 0 (centre) and shown highlighted.
+                      if (context.mounted) Navigator.of(context).pop();
                     }
                   },
                   onLongPress: (isPlayerOwned && stationary && !mergeMode)
