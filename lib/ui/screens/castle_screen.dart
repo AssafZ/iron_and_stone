@@ -62,18 +62,11 @@ class CastleScreen extends ConsumerWidget {
               .toList();
 
           // All companies at this node (including those passing through).
-          // Sort so the currently selected company appears first (on top in
-          // the roster) — satisfies the "selected always on top" requirement.
-          final castleSelectedId =
-              ref.watch(castleSelectedCompanyProvider(castleId));
+          // Order is NOT sorted here — _CompaniesRosterCard owns the stable
+          // display order (selected company first, fixed at entry time).
           final allCompaniesHere = matchState.companies
               .where((co) => co.currentNode.id == castleId)
-              .toList()
-            ..sort((a, b) {
-              if (a.id == castleSelectedId) return -1;
-              if (b.id == castleSelectedId) return 1;
-              return 0;
-            });
+              .toList();
 
           // Peasant count from stationed companies (drives growth rate).
           final peasantsInCompanies = stationedCompanies.fold<int>(
@@ -143,38 +136,85 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   /// second company to merge with the one at [_mergeSourceIndex].
   int? _mergeSourceIndex;
 
+  /// Stable display order for the roster rows.
+  ///
+  /// Built once in [initState] (and refreshed in [didUpdateWidget] only when
+  /// the set of company IDs changes — e.g. after a merge or split).
+  /// The selected company is always placed first; the rest keep their
+  /// original order.  Tapping a row never reorders this list.
+  late List<CompanyOnMap> _orderedCompanies;
+
   @override
   void initState() {
     super.initState();
-    // Auto-select the appropriate company as soon as the frame settles so
-    // both the castle roster star and the map's on-top render always reflect
-    // the same selection:
-    //  • If castleSelectedCompanyProvider already has a valid ID for this
-    //    castle → keep it (persisted from a previous visit).
-    //  • Otherwise → select the first player-owned stationary company here.
+    // Build the initial stable order immediately — no async gap, no flicker.
+    _orderedCompanies = _buildOrderedList(
+      widget.companies,
+      ref.read(castleSelectedCompanyProvider(widget.castleId)),
+    );
+    // Auto-select on first frame so both the gold border and the map
+    // on-top rendering are in sync from the very first paint.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _ensureSelection();
     });
   }
 
-  /// Selects the correct company for this castle if needed.
+  @override
+  void didUpdateWidget(_CompaniesRosterCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh the ordered list only when the set of companies changes
+    // (merge / split / company leaving the castle).  A pure tap-selection
+    // change must NOT reorder the list.
+    final oldIds = oldWidget.companies.map((c) => c.id).toSet();
+    final newIds = widget.companies.map((c) => c.id).toSet();
+    if (oldIds != newIds) {
+      final selectedId =
+          ref.read(castleSelectedCompanyProvider(widget.castleId));
+      setState(() {
+        _orderedCompanies = _buildOrderedList(widget.companies, selectedId);
+      });
+    } else {
+      // IDs unchanged — update company data in-place (soldier counts, etc.)
+      // while keeping the same display order.
+      setState(() {
+        final byId = {for (final c in widget.companies) c.id: c};
+        _orderedCompanies = [
+          for (final c in _orderedCompanies)
+            if (byId.containsKey(c.id)) byId[c.id]! else c,
+        ];
+      });
+    }
+  }
+
+  /// Build an ordered company list: selected company first, then the rest
+  /// in their original order.
+  static List<CompanyOnMap> _buildOrderedList(
+    List<CompanyOnMap> companies,
+    String? selectedId,
+  ) {
+    if (selectedId == null || !companies.any((c) => c.id == selectedId)) {
+      return List<CompanyOnMap>.from(companies);
+    }
+    final selected = companies.firstWhere((c) => c.id == selectedId);
+    final rest = companies.where((c) => c.id != selectedId).toList();
+    return [selected, ...rest];
+  }
+
+  /// Ensures a company is selected for this castle on entry.
   ///
   /// Uses the per-castle [castleSelectedCompanyProvider] so each castle
   /// independently remembers its last selection across navigation pushes.
   void _ensureSelection() {
     final currentId =
         ref.read(castleSelectedCompanyProvider(widget.castleId));
-    // If the previously selected company is still present in this castle,
-    // keep it and ensure the map-level selection also reflects it.
+    // If the previously selected company is still present, keep it and
+    // re-sync the map-level selection in case it drifted.
     if (currentId != null &&
         widget.companies.any((c) => c.id == currentId)) {
-      // Re-sync the map selection to this company in case it drifted
-      // (e.g. player tapped the X on the map banner between visits).
       ref.read(companyNotifierProvider.notifier).selectCompany(currentId);
       return;
     }
-
     // Otherwise auto-select the first player-owned stationary company.
     final first = widget.companies.firstWhere(
       (c) => c.ownership == Ownership.player && _isStationary(c),
@@ -185,8 +225,10 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
 
   /// Select a company: update both the per-castle provider (for screen
   /// persistence) and the global company notifier (for map rendering).
+  /// Does NOT reorder [_orderedCompanies].
   void _selectCompany(String id) {
-    ref.read(castleSelectedCompanyProvider(widget.castleId).notifier).state = id;
+    ref.read(castleSelectedCompanyProvider(widget.castleId).notifier).state =
+        id;
     ref.read(companyNotifierProvider.notifier).selectCompany(id);
   }
 
@@ -293,22 +335,25 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
 
   @override
   Widget build(BuildContext context) {
-    final companies = widget.companies;
+    // Use the stable ordered list — selected company is always first,
+    // order never changes when the user taps a row.
+    final companies = _orderedCompanies;
     final mergeMode = _mergeSourceIndex != null;
 
     // Watch the per-castle selection provider — this is the source of truth
     // for which company has the star highlight in the roster.  It persists
-    // across navigation pushes (not autoDispose) and is initialised / kept
-    // in sync by _ensureSelection / _selectCompany.
-    final selectedId = ref.watch(castleSelectedCompanyProvider(widget.castleId));
+    // across navigation pushes (not autoDispose) and is kept in sync by
+    // _ensureSelection / _selectCompany.
+    final selectedId =
+        ref.watch(castleSelectedCompanyProvider(widget.castleId));
 
     // The "front" company is whichever one is selected and still present at
-    // this castle.  Falls back to the first company only for the brief moment
-    // before _ensureSelection fires (one frame).
-    final frontId = (selectedId != null &&
-            companies.any((c) => c.id == selectedId))
-        ? selectedId
-        : (companies.isNotEmpty ? companies.first.id : null);
+    // this castle.  Falls back to the first company in the ordered list only
+    // for the brief moment before _ensureSelection fires (one frame).
+    final frontId =
+        (selectedId != null && companies.any((c) => c.id == selectedId))
+            ? selectedId
+            : (companies.isNotEmpty ? companies.first.id : null);
 
     return Card(
       key: const ValueKey('castle_roster_card'),
