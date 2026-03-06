@@ -6,7 +6,6 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/rules/ai_controller.dart';
-import 'package:iron_and_stone/domain/rules/battle_engine.dart';
 import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
@@ -135,8 +134,8 @@ final class TickMatch {
     // ---------------------------------------------------------------------------
     var currentActiveBattles = List<ActiveBattle>.from(activeBattles);
     final existingBattleNodeIds = {for (final b in currentActiveBattles) b.nodeId};
-    // Track battles created this tick so Phase B skips them (they must be
-    // visible to the UI for at least one full tick before their first round).
+    // Track battles created this tick so Phase A-R skips them — reinforcements
+    // shouldn't be added to a battle in the same tick it was created.
     final newBattleIds = <String>{};
 
     for (final trigger in triggers) {
@@ -270,7 +269,7 @@ final class TickMatch {
       );
       currentActiveBattles.add(newBattle);
       existingBattleNodeIds.add(nodeId);
-      newBattleIds.add(newBattle.id); // don't advance this battle in Phase B
+      newBattleIds.add(newBattle.id); // skip in Phase A-R
 
       // Tag all involved companies with this battle's id.
       final battleId = newBattle.id;
@@ -343,23 +342,17 @@ final class TickMatch {
     }
 
     // ---------------------------------------------------------------------------
-    // Phase B: advance each unresolved ActiveBattle one round
+    // Phase B: intentionally removed.
+    //
+    // Battles are NOT auto-advanced by the game-loop tick. They are advanced
+    // exclusively via MatchNotifier.advanceBattleRound() (the "Next Round"
+    // button on BattleScreen). This ensures:
+    //   1. The BattleIndicator is always visible for at least one tick.
+    //   2. The game loop never races against the player's manual round taps.
+    //   3. Phase C (cleanup) below still handles any battles that arrive
+    //      already-resolved (e.g. from a direct advanceBattleRound call that
+    //      resolved the battle and stored it back via MatchState).
     // ---------------------------------------------------------------------------
-    final advancedBattles = <ActiveBattle>[];
-    for (final ab in currentActiveBattles) {
-      if (newBattleIds.contains(ab.id)) {
-        // Newly created this tick — carry forward without advancing so the UI
-        // can render the BattleIndicator for at least one tick.
-        advancedBattles.add(ab);
-      } else if (ab.battle.outcome != null) {
-        // Already resolved — carry forward for Phase C cleanup.
-        advancedBattles.add(ab);
-      } else {
-        final roundResult = const BattleEngine().resolveRound(ab.battle);
-        advancedBattles.add(ab.copyWith(battle: roundResult.updatedBattle));
-      }
-    }
-    currentActiveBattles = advancedBattles;
 
     // ---------------------------------------------------------------------------
     // Phase C: post-battle cleanup for resolved ActiveBattles

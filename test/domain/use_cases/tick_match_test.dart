@@ -1260,12 +1260,15 @@ void main() {
     });
 
     // -------------------------------------------------------------------------
-    // T013: tick() advances an existing ActiveBattle by one round per tick
+    // T013: tick() carries an existing ActiveBattle forward unchanged
+    //
+    // Battles are NOT auto-advanced by the game-loop tick.  They are advanced
+    // exclusively by MatchNotifier.advanceBattleRound() ("Next Round" button).
     // -------------------------------------------------------------------------
-    group('T013: existing ActiveBattle advances one round per tick', () {
+    group('T013: existing ActiveBattle is carried forward unchanged by tick', () {
       test(
         'T013: after one tick with an existing active battle, '
-        'roundNumber increases by 1',
+        'roundNumber stays at 0 (battle not auto-advanced)',
         () {
           const playerCastle = CastleNode(
             id: 'pc',
@@ -1329,22 +1332,21 @@ void main() {
             activeBattles: [activeBattle],
           );
 
-          // The battle must have advanced by exactly one round
+          // The battle must still be present and NOT yet advanced
           final updatedBattle = result.activeBattles
               .where((b) => b.id == 'battle_pc')
               .firstOrNull;
-          // If still ongoing, roundNumber == 1; if already resolved, it's absent
-          if (updatedBattle != null) {
-            expect(
-              updatedBattle.battle.roundNumber,
-              equals(battle.roundNumber + 1),
-            );
-          } else {
-            // Battle resolved in one round — that's acceptable for a heavy-damage scenario
-            // but here warriors deal modest damage so verify it advanced at least once
-            // by checking the result companies have been updated
-            expect(result.companies.length, lessThanOrEqualTo(2));
-          }
+          expect(
+            updatedBattle,
+            isNotNull,
+            reason: 'ActiveBattle must still be present after one tick',
+          );
+          expect(
+            updatedBattle!.battle.roundNumber,
+            equals(battle.roundNumber), // still 0 — not advanced by tick
+            reason: 'tick() must NOT auto-advance battle rounds; '
+                'only advanceBattleRound() does that',
+          );
         },
       );
     });

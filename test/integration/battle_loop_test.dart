@@ -717,8 +717,8 @@ void main() {
     });
 
     test(
-        'SC-009b: game loop auto-advances battle via TickMatch ticks '
-        'and cleans up without manual intervention', () {
+        'SC-009b: game loop triggers battle and carries it forward; '
+        'battle is NOT auto-resolved by ticks (requires manual advanceBattleRound)', () {
       final match = _SimpleMap.match();
 
       // Companies already at the junction when the loop starts.
@@ -740,8 +740,9 @@ void main() {
       var currentBattles = <ActiveBattle>[];
       var battleWasTriggered = false;
 
-      // Run the loop until battle is triggered and then fully resolved.
-      for (var i = 0; i < 500; i++) {
+      // Run for a few ticks — the battle should be triggered and then
+      // carried forward without auto-advancing (roundNumber stays at 0).
+      for (var i = 0; i < 10; i++) {
         final result = const TickMatch().tick(
           match: match.copyWith(elapsedTime: Duration(seconds: i * 10)),
           castles: currentCastles,
@@ -752,25 +753,19 @@ void main() {
         currentCompanies = result.companies;
         currentBattles = result.activeBattles;
 
-        if (currentBattles.isNotEmpty) {
+        if (currentBattles.isNotEmpty && !battleWasTriggered) {
           battleWasTriggered = true;
-        }
-
-        if (battleWasTriggered && currentBattles.isEmpty) {
-          break;
         }
       }
 
       expect(battleWasTriggered, isTrue,
           reason: 'A battle must have been triggered during the run');
-      expect(currentBattles, isEmpty,
-          reason: 'Battle must be fully resolved and cleaned up');
-
-      // All survivors must have cleared battleId.
-      for (final co in currentCompanies) {
-        expect(co.battleId, isNull,
-            reason: 'Survivor battleId must be null after cleanup');
-      }
+      // The battle must still be active — ticks do NOT resolve battles.
+      expect(currentBattles, isNotEmpty,
+          reason: 'Battle must still be active; ticks do not auto-advance it');
+      // roundNumber must still be 0 — ticks carry it forward without advancing.
+      expect(currentBattles.first.battle.roundNumber, equals(0),
+          reason: 'tick() must not advance roundNumber; only advanceBattleRound() does');
     });
   });
 }
