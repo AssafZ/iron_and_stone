@@ -138,22 +138,19 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
 
   /// Stable display order for the roster rows.
   ///
-  /// Built once in [initState] (and refreshed in [didUpdateWidget] only when
-  /// the set of company IDs changes — e.g. after a merge or split).
-  /// The selected company is always placed first; the rest keep their
-  /// original order.  Tapping a row never reorders this list.
+  /// Frozen at [initState] time and only refreshed in [didUpdateWidget] when
+  /// the set of company IDs changes (merge / split / company leaving the
+  /// castle).  Never reordered by row taps or selection changes.
   late List<CompanyOnMap> _orderedCompanies;
 
   @override
   void initState() {
     super.initState();
-    // Build the initial stable order immediately — no async gap, no flicker.
-    _orderedCompanies = _buildOrderedList(
-      widget.companies,
-      ref.read(castleSelectedCompanyProvider(widget.castleId)),
-    );
-    // Auto-select on first frame so both the gold border and the map
-    // on-top rendering are in sync from the very first paint.
+    // Freeze the display order once at entry — the list must not jump around
+    // when the user taps rows or re-enters the screen.
+    _orderedCompanies = List<CompanyOnMap>.from(widget.companies);
+    // Ensure a company is selected (and map selection is in sync) on the
+    // first frame after mount.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _ensureSelection();
@@ -164,19 +161,17 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   void didUpdateWidget(_CompaniesRosterCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Refresh the ordered list only when the set of companies changes
-    // (merge / split / company leaving the castle).  A pure tap-selection
-    // change must NOT reorder the list.
+    // (merge / split / company leaving the castle).  Selection changes must
+    // NOT reorder the list.
     final oldIds = oldWidget.companies.map((c) => c.id).toSet();
     final newIds = widget.companies.map((c) => c.id).toSet();
     if (oldIds != newIds) {
-      final selectedId =
-          ref.read(castleSelectedCompanyProvider(widget.castleId));
       setState(() {
-        _orderedCompanies = _buildOrderedList(widget.companies, selectedId);
+        _orderedCompanies = List<CompanyOnMap>.from(widget.companies);
       });
     } else {
-      // IDs unchanged — update company data in-place (soldier counts, etc.)
-      // while keeping the same display order.
+      // IDs unchanged — update company data in-place (soldier counts etc.)
+      // while preserving display order.
       setState(() {
         final byId = {for (final c in widget.companies) c.id: c};
         _orderedCompanies = [
@@ -185,20 +180,6 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
         ];
       });
     }
-  }
-
-  /// Build an ordered company list: selected company first, then the rest
-  /// in their original order.
-  static List<CompanyOnMap> _buildOrderedList(
-    List<CompanyOnMap> companies,
-    String? selectedId,
-  ) {
-    if (selectedId == null || !companies.any((c) => c.id == selectedId)) {
-      return List<CompanyOnMap>.from(companies);
-    }
-    final selected = companies.firstWhere((c) => c.id == selectedId);
-    final rest = companies.where((c) => c.id != selectedId).toList();
-    return [selected, ...rest];
   }
 
   /// Ensures a company is selected for this castle on entry.

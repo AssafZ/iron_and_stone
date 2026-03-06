@@ -334,13 +334,39 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         (selectedCo.destination == null ||
             selectedCo.destination!.id == selectedCo.currentNode.id);
 
-    // Render companies with the selected/pinned one last so it appears on top
-    // of all others at the same position (castle stack).
-    final sortedCompanies = selectedId == null
+    // Render companies with the map-selected one last (on top).
+    // Additionally, for companies at castle nodes, ensure the castle's
+    // last-selected company is drawn on top even when the map-level selection
+    // is null (e.g. after the player deselects or taps the X banner).
+    // Build a per-castle "front" ID map from castleSelectedCompanyProvider.
+    final castleNodes = nodes.whereType<CastleNode>().toList();
+    final castleFrontId = {
+      for (final cn in castleNodes)
+        cn.id: ref.read(castleSelectedCompanyProvider(cn.id)),
+    };
+
+    // Determine the single ID that should be rendered on top globally:
+    // prefer the map's selectedId; fall back to the castle-front for any
+    // castle where the selectedId company currently lives.
+    String? topId = selectedId;
+    if (topId == null) {
+      // No map selection — pin the castle-front company on top at its castle.
+      for (final entry in castleFrontId.entries) {
+        final frontId = entry.value;
+        if (frontId != null &&
+            companies.any((c) => c.id == frontId &&
+                c.currentNode.id == entry.key)) {
+          topId = frontId;
+          break;
+        }
+      }
+    }
+
+    final sortedCompanies = topId == null
         ? companies
         : [
-            ...companies.where((c) => c.id != selectedId),
-            ...companies.where((c) => c.id == selectedId),
+            ...companies.where((c) => c.id != topId),
+            ...companies.where((c) => c.id == topId),
           ];
 
     return Column(
