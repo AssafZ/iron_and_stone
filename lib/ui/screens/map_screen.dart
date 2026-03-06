@@ -49,22 +49,20 @@ const List<(double, double)> _kSlotOffsets = [
 
 /// Builds a node-occupancy map directly from the authoritative company list.
 ///
-/// Only stationary companies (destination == null or destination == currentNode)
-/// are included. Companies at the same node are sorted lexicographically by id
-/// so the slot order is deterministic across every render frame — no transient
-/// arrival-order state is needed.
+/// Only stationary companies at **road nodes** are included. Castle-node
+/// companies are intentionally excluded — they are all stacked at the centre
+/// of their castle icon, and the selected/front company is rendered on top via
+/// draw-order (see [_buildMap]).
 ///
-/// When [pinnedId] is provided (the currently selected company), that company
-/// is placed in slot 0 (the centre) at its node. This makes the selected/front
-/// company visually "on top" and easiest to tap.
+/// Companies at the same road node are sorted lexicographically by id so the
+/// slot order is deterministic across every render frame.
 ///
 /// This is called once per [_buildMap] frame and the result is passed to
 /// [_offsetForCompany] for each company, keeping slot assignment consistent
 /// within a frame.
 Map<String, List<String>> _buildSlotMap(
-  List<CompanyOnMap> companies, {
-  String? pinnedId,
-}) {
+  List<CompanyOnMap> companies,
+) {
   final map = <String, List<String>>{};
   for (final co in companies) {
     // Companies frozen in a battle are stationary at their currentNode even
@@ -73,17 +71,14 @@ Map<String, List<String>> _buildSlotMap(
         co.destination == null ||
         co.destination!.id == co.currentNode.id;
     if (!isStationary) continue;
+    // Castle-node companies all sit at the same centre position — they are
+    // stacked on top of each other, so they must NOT be given spread offsets.
+    if (co.currentNode is CastleNode) continue;
     map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
   }
-  // Sort each node's list by id so order is stable across rebuilds,
-  // then promote pinnedId to slot 0 if present.
+  // Sort each node's list by id so order is stable across rebuilds.
   for (final entry in map.entries) {
-    final ids = entry.value;
-    ids.sort();
-    if (pinnedId != null && ids.contains(pinnedId)) {
-      ids.remove(pinnedId);
-      ids.insert(0, pinnedId);
-    }
+    entry.value.sort();
   }
   return map;
 }
@@ -320,9 +315,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // Build the slot map from the authoritative match-state company list so
     // offsets are always correct — even after tick-driven movement where
     // companies arrive at nodes without going through CompanyNotifier actions.
-    // The selected company is pinned to slot 0 so it renders at the centre
-    // and is easiest to tap after being chosen in the castle screen.
-    final slotMap = _buildSlotMap(companies, pinnedId: selectedId);
+    // Castle-node companies are excluded from the slot map and all sit at the
+    // same centre position. The selected company is drawn last (on top) in the
+    // render list so its tap target wins when multiple companies share a castle.
+    final slotMap = _buildSlotMap(companies);
+
+    // Render companies with the selected/pinned one last so it appears on top
+    // of all others at the same position (castle stack).
+    final sortedCompanies = selectedId == null
+        ? companies
+        : [
+            ...companies.where((c) => c.id != selectedId),
+            ...companies.where((c) => c.id == selectedId),
+          ];
 
     return Column(
       children: [
@@ -409,7 +414,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // rendered here with offset slots so opposing companies
                   // appear side-by-side rather than stacked. The BattleIndicator
                   // is rendered on top as a separate overlay.
-                  ...companies
+                  ...sortedCompanies
                       .map((co) {
                     final (cx, cy) = _companyVisualPos(co, matchState);
                     final isSelected = co.id == selectedId;
