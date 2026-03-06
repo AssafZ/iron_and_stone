@@ -121,11 +121,6 @@ class _CompaniesRosterCard extends ConsumerStatefulWidget {
 }
 
 class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
-  /// Index into [widget.companies] of the currently highlighted "front" company.
-  /// Initialised from [companyNotifierProvider.selectedCompanyId] so that
-  /// re-entering the screen after selecting a company shows the correct highlight.
-  late int _frontIndex;
-
   /// When non-null, we are in "merge mode": waiting for the user to pick a
   /// second company to merge with the one at [_mergeSourceIndex].
   int? _mergeSourceIndex;
@@ -133,25 +128,35 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   @override
   void initState() {
     super.initState();
-    // Restore the front index from the currently selected company.
-    // We try immediately; if the provider is still loading we schedule a
-    // post-frame retry so the highlight updates as soon as data is available.
-    _frontIndex = _indexOfSelected();
+    // Auto-select the appropriate company as soon as the frame settles so
+    // both the castle roster star and the map's on-top render always reflect
+    // the same selection:
+    //  • If a company from THIS castle is already selected → keep it.
+    //  • Otherwise → select the first player-owned stationary company here.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final idx = _indexOfSelected();
-      if (idx != _frontIndex) setState(() => _frontIndex = idx);
+      _ensureSelection();
     });
   }
 
-  /// Returns the index in [widget.companies] that matches the currently
-  /// selected company ID, or 0 if nothing matches.
-  int _indexOfSelected() {
-    final selectedId =
+  /// Selects the correct company for this castle if needed.
+  ///
+  /// Called once after mount. Picks the first player-owned stationary
+  /// company when nothing at this castle is currently selected.
+  void _ensureSelection() {
+    final currentId =
         ref.read(companyNotifierProvider).valueOrNull?.selectedCompanyId;
-    if (selectedId == null) return 0;
-    final idx = widget.companies.indexWhere((c) => c.id == selectedId);
-    return idx >= 0 ? idx : 0;
+    // If the currently selected company belongs to this castle, keep it.
+    final alreadyHere = currentId != null &&
+        widget.companies.any((c) => c.id == currentId);
+    if (alreadyHere) return;
+
+    // Otherwise auto-select the first player-owned stationary company.
+    final first = widget.companies.firstWhere(
+      (c) => c.ownership == Ownership.player && _isStationary(c),
+      orElse: () => widget.companies.first,
+    );
+    ref.read(companyNotifierProvider.notifier).selectCompany(first.id);
   }
 
   String _roleName(UnitRole role) {
@@ -260,18 +265,18 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
     final companies = widget.companies;
     final mergeMode = _mergeSourceIndex != null;
 
-    // Watch selectedCompanyId so the highlight stays in sync with the notifier.
+    // Watch selectedCompanyId — the single source of truth for which company
+    // has the star highlight and is shown on top of the stack on the map.
     final selectedId =
         ref.watch(companyNotifierProvider).valueOrNull?.selectedCompanyId;
 
-    // If nothing is selected yet (or the selected company is not in this
-    // castle's list), show the first company as the visual front (for
-    // highlight purposes) but do NOT auto-call selectCompany — that should
-    // only happen when the user explicitly taps a row.
-    final frontId = selectedId != null &&
-            companies.any((c) => c.id == selectedId)
+    // The "front" company is whichever one is selected and belongs to this
+    // castle. Falls back to the first company only for the brief moment before
+    // _ensureSelection fires (one frame).
+    final frontId = (selectedId != null &&
+            companies.any((c) => c.id == selectedId))
         ? selectedId
-        : (companies.isNotEmpty ? companies[_frontIndex].id : null);
+        : (companies.isNotEmpty ? companies.first.id : null);
 
     return Card(
       key: const ValueKey('castle_roster_card'),
@@ -354,7 +359,6 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                       _showMergePrompt(
                           context, companies[sourceIndex], co);
                     } else {
-                      setState(() => _frontIndex = index);
                       ref
                           .read(companyNotifierProvider.notifier)
                           .selectCompany(co.id);
@@ -471,7 +475,7 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                         foregroundColor: AppTheme.ironDark,
                       ),
                       onPressed: () {
-                        // Enter merge mode: highlight the front company as source.
+                        // Enter merge mode: use the front (selected) company as merge source.
                         final playerStationary = companies
                             .asMap()
                             .entries
@@ -479,18 +483,17 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                                 e.value.ownership == Ownership.player &&
                                 _isStationary(e.value))
                             .toList();
-                        // Default source = the currently highlighted front company
-                        // if it's a valid candidate, else first stationary player company.
                         final frontIdx = frontId == null
-                            ? _frontIndex
+                            ? 0
                             : companies.indexWhere((c) => c.id == frontId);
-                        final frontCo = companies[frontIdx >= 0 ? frontIdx : _frontIndex];
+                        final resolvedIdx = frontIdx >= 0 ? frontIdx : 0;
+                        final frontCo = companies[resolvedIdx];
                         final frontIsCandidate =
                             frontCo.ownership == Ownership.player &&
                                 _isStationary(frontCo);
                         setState(() {
                           _mergeSourceIndex = frontIsCandidate
-                              ? (frontIdx >= 0 ? frontIdx : _frontIndex)
+                              ? resolvedIdx
                               : playerStationary.first.key;
                         });
                       },
@@ -503,11 +506,11 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                       foregroundColor: AppTheme.ironDark,
                     ),
                     onPressed: () {
-                      // Split the currently highlighted front company (if eligible).
+                      // Split the currently highlighted front (selected) company.
                       final frontIdx = frontId == null
-                          ? _frontIndex
+                          ? 0
                           : companies.indexWhere((c) => c.id == frontId);
-                      final co = companies[frontIdx >= 0 ? frontIdx : _frontIndex];
+                      final co = companies[frontIdx >= 0 ? frontIdx : 0];
                       if (co.ownership == Ownership.player &&
                           _isStationary(co)) {
                         _showSplitSheet(context, co);

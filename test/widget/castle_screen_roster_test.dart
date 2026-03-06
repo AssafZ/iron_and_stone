@@ -245,11 +245,11 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
-    // T033: dismissing the roster without selection triggers no company action.
+    // T033: opening the castle screen auto-selects the first player company.
     // -----------------------------------------------------------------------
     testWidgets(
-      'T033: dismissing the castle screen without tapping a roster row '
-      'triggers no company selection',
+      'T033: opening the castle screen auto-selects the first player company '
+      'so the map always shows the correct unit on top',
       (tester) async {
         final coA = _makePlayerCompany(
           id: 'co_a',
@@ -269,13 +269,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Navigate back without tapping any row (pop via back button).
-        final NavigatorState navigator = tester.state(find.byType(Navigator));
-        navigator.pop();
-        await tester.pumpAndSettle();
-
-        // selectCompany should never have been called.
-        expect(fakeNotifier.lastSelectedId, isNull);
+        // The first company should be auto-selected on entry.
+        expect(fakeNotifier.lastSelectedId, equals('co_a'));
       },
     );
 
