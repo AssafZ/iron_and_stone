@@ -117,6 +117,15 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     // the UI, but guard here as a safety net.
     if (current.match.phase == MatchPhase.ended) return null;
 
+    // Do not run a tick while a battle is in progress.
+    // Battles are advanced exclusively by the player via the "Next Round"
+    // button on BattleScreen (MatchNotifier.advanceBattleRound).  Ticking
+    // during a battle would grow soldier counts and advance AI positions while
+    // the player is focused on the battle screen, and could overwrite the
+    // battle state written by advanceBattleRound in edge cases where the DAO
+    // persist callback fires between two rapid taps.
+    if (current.match.phase == MatchPhase.inBattle) return null;
+
     // TickMatch now includes AiController decision + application internally,
     // so result.companies may include newly AI-deployed companies.
     final result = const TickMatch().tick(
@@ -188,6 +197,9 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
   ///
   /// Is a no-op when no [ActiveBattle] with the given [battleId] exists.
   Future<void> advanceBattleRound(String battleId) async {
+    // Re-read state immediately before advancing — ensures we always operate
+    // on the freshest snapshot even if a concurrent tick() wrote new state
+    // between the button tap and this point.
     final current = state.valueOrNull;
     if (current == null) return;
 
@@ -203,9 +215,17 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     MatchState newState;
     if (advanced.battle.outcome != null) {
       // Battle resolved — run full Phase C cleanup.
-      newState = _applyPostBattleCleanup(
+      final afterCleanup = _applyPostBattleCleanup(
         current.copyWith(activeBattles: newBattles),
         advanced,
+      );
+      // Check whether any battles are still ongoing after this one resolved.
+      // If none remain, resume the game loop by switching back to playing.
+      final stillInBattle = afterCleanup.activeBattles.isNotEmpty;
+      newState = afterCleanup.copyWith(
+        match: afterCleanup.match.copyWith(
+          phase: stillInBattle ? MatchPhase.inBattle : MatchPhase.playing,
+        ),
       );
     } else {
       newState = current.copyWith(activeBattles: newBattles);

@@ -351,5 +351,199 @@ void main() {
         );
       },
     );
+
+    test(
+      'T023c-5: calling advanceBattleRound twice increments roundNumber to 2',
+      () async {
+        // Long-lived battle so it won't resolve in two rounds.
+        final battle = Battle(
+          attackers: [Company(composition: {UnitRole.warrior: 20})],
+          defenders: [Company(composition: {UnitRole.warrior: 20})],
+        );
+        final activeBattle = ActiveBattle(
+          nodeId: 'junction_mid',
+          attackerCompanyIds: ['p1'],
+          defenderCompanyIds: ['ai1'],
+          attackerOwnership: Ownership.player,
+          battle: battle,
+        );
+        final playerCo = CompanyOnMap(
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.warrior: 20}),
+          battleId: activeBattle.id,
+        );
+        final aiCo = CompanyOnMap(
+          id: 'ai1',
+          ownership: Ownership.ai,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.warrior: 20}),
+          battleId: activeBattle.id,
+        );
+        final initialState = _stateWithOngoingBattle(
+          activeBattle: activeBattle,
+          companies: [playerCo, aiCo],
+        );
+        final container = _makeContainer(initialState);
+        addTearDown(container.dispose);
+
+        await container.read(matchNotifierProvider.future);
+
+        // First advance: round 0 → 1
+        await container
+            .read(matchNotifierProvider.notifier)
+            .advanceBattleRound(activeBattle.id);
+
+        final stateAfter1 = container.read(matchNotifierProvider).valueOrNull!;
+        final battleAfter1 = stateAfter1.activeBattles
+            .firstWhere((ab) => ab.id == activeBattle.id);
+        expect(battleAfter1.battle.roundNumber, equals(1),
+            reason: 'First advanceBattleRound must increment to round 1');
+
+        // Second advance: round 1 → 2
+        await container
+            .read(matchNotifierProvider.notifier)
+            .advanceBattleRound(activeBattle.id);
+
+        final stateAfter2 = container.read(matchNotifierProvider).valueOrNull!;
+        final battleAfter2 = stateAfter2.activeBattles
+            .firstWhere((ab) => ab.id == activeBattle.id);
+        expect(battleAfter2.battle.roundNumber, equals(2),
+            reason: 'Second advanceBattleRound must increment to round 2');
+      },
+    );
+
+    test(
+      'T023c-6: tick() is a no-op when match.phase == inBattle',
+      () async {
+        final battle = Battle(
+          attackers: [Company(composition: {UnitRole.warrior: 10})],
+          defenders: [Company(composition: {UnitRole.warrior: 10})],
+        );
+        final activeBattle = ActiveBattle(
+          nodeId: 'junction_mid',
+          attackerCompanyIds: ['p1'],
+          defenderCompanyIds: ['ai1'],
+          attackerOwnership: Ownership.player,
+          battle: battle,
+        );
+        final playerCo = CompanyOnMap(
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.warrior: 10}),
+          battleId: activeBattle.id,
+        );
+        final aiCo = CompanyOnMap(
+          id: 'ai1',
+          ownership: Ownership.ai,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.warrior: 10}),
+          battleId: activeBattle.id,
+        );
+        // State with inBattle phase.
+        final map = _makeMap();
+        final castles = map.nodes.whereType<CastleNode>().map((n) {
+          return Castle(id: n.id, ownership: n.ownership, garrison: const {});
+        }).toList();
+        final initialState = MatchState(
+          match: Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.inBattle,
+          ),
+          castles: castles,
+          companies: [playerCo, aiCo],
+          activeBattles: [activeBattle],
+        );
+        final container = _makeContainer(initialState);
+        addTearDown(container.dispose);
+
+        await container.read(matchNotifierProvider.future);
+
+        // Call tick — must be a no-op (returns null, state unchanged).
+        final result =
+            await container.read(matchNotifierProvider.notifier).tick();
+
+        expect(result, isNull,
+            reason: 'tick() must return null when phase is inBattle');
+        final newState = container.read(matchNotifierProvider).valueOrNull!;
+        // activeBattles must be unchanged (battle still at round 0).
+        expect(
+          newState.activeBattles.first.battle.roundNumber,
+          equals(0),
+          reason: 'tick() must not change battle state when phase is inBattle',
+        );
+      },
+    );
+
+    test(
+      'T023c-7: after battle resolves via advanceBattleRound, match.phase '
+      'returns to playing',
+      () async {
+        // One-round battle: 10 knights vs 1 peasant.
+        final battle = Battle(
+          attackers: [Company(composition: {UnitRole.knight: 10})],
+          defenders: [Company(composition: {UnitRole.peasant: 1})],
+        );
+        final activeBattle = ActiveBattle(
+          nodeId: 'junction_mid',
+          attackerCompanyIds: ['p1'],
+          defenderCompanyIds: ['ai1'],
+          attackerOwnership: Ownership.player,
+          battle: battle,
+        );
+        final playerCo = CompanyOnMap(
+          id: 'p1',
+          ownership: Ownership.player,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.knight: 10}),
+          battleId: activeBattle.id,
+        );
+        final aiCo = CompanyOnMap(
+          id: 'ai1',
+          ownership: Ownership.ai,
+          currentNode: _junction,
+          company: Company(composition: {UnitRole.peasant: 1}),
+          battleId: activeBattle.id,
+        );
+        final map = _makeMap();
+        final castles = map.nodes.whereType<CastleNode>().map((n) {
+          return Castle(id: n.id, ownership: n.ownership, garrison: const {});
+        }).toList();
+        // Start with inBattle phase.
+        final initialState = MatchState(
+          match: Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.inBattle,
+          ),
+          castles: castles,
+          companies: [playerCo, aiCo],
+          activeBattles: [activeBattle],
+        );
+        final container = _makeContainer(initialState);
+        addTearDown(container.dispose);
+
+        await container.read(matchNotifierProvider.future);
+
+        // Advance until battle resolves.
+        for (var i = 0; i < 20; i++) {
+          final s = container.read(matchNotifierProvider).valueOrNull!;
+          if (s.activeBattles.isEmpty) break;
+          await container
+              .read(matchNotifierProvider.notifier)
+              .advanceBattleRound(activeBattle.id);
+        }
+
+        final finalState = container.read(matchNotifierProvider).valueOrNull!;
+
+        expect(finalState.activeBattles, isEmpty,
+            reason: 'Battle must be resolved');
+        expect(finalState.match.phase, equals(MatchPhase.playing),
+            reason: 'Phase must return to playing after all battles resolve');
+      },
+    );
   });
 }
