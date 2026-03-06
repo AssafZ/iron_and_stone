@@ -175,7 +175,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: newList,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
 
@@ -230,7 +229,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: remaining,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(remaining);
@@ -280,7 +278,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: updated,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(updated);

@@ -90,7 +90,7 @@ void main() {
 
     // T037a — Two-step Company selection UX
     testWidgets(
-        'first tap on Company marker sets selectedCompanyId; second tap on node assigns destination and clears selection',
+        'first tap on Company marker sets selectedCompanyId; second tap on node assigns destination and hides move banner',
         (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
@@ -109,13 +109,17 @@ void main() {
 
       // Selection indicator should appear.
       expect(find.byKey(const ValueKey('company_selected_player_co0')), findsOneWidget);
+      // Move-mode banner should appear.
+      expect(find.byKey(const ValueKey('move_hint_banner')), findsOneWidget);
 
-      // Second tap on destination node → assignment + clear selection.
+      // Second tap on destination node → assigns destination.
       await tester.tap(find.byKey(const ValueKey('junction_node_j1')));
       await tester.pumpAndSettle();
 
-      // Selection indicator should be gone.
-      expect(find.byKey(const ValueKey('company_selected_player_co0')), findsNothing);
+      // Move-mode banner should be gone (company is now marching).
+      expect(find.byKey(const ValueKey('move_hint_banner')), findsNothing);
+      // Selection indicator persists so the company stays on top in the castle.
+      expect(find.byKey(const ValueKey('company_selected_player_co0')), findsOneWidget);
     });
 
     testWidgets(

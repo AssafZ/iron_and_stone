@@ -291,22 +291,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       for (final c in matchState.castles) c.id: c.ownership,
     };
 
-    // Compute reachable nodes when a company is selected (for visual highlight).
+    // Compute reachable nodes only when in "move mode" (selected company is
+    // stationary on a road node, banner is visible).
     Set<String> reachableNodeIds = {};
     if (selectedId != null) {
       // Use matchState.companies (authoritative) so this works even after ticks
       // have advanced companies without updating the local CompanyNotifier list.
-      final selectedCo = matchState.companies
+      final sc = matchState.companies
           .where((c) => c.id == selectedId)
           .firstOrNull;
-      if (selectedCo != null) {
+      final inMoveMode = sc != null &&
+          sc.battleId == null &&
+          (sc.destination == null || sc.destination!.id == sc.currentNode.id);
+      if (inMoveMode) {
         reachableNodeIds = matchState.match.map.edges
-            .where((e) => e.from.id == selectedCo.currentNode.id)
+            .where((e) => e.from.id == sc.currentNode.id)
             .map((e) => e.to.id)
             .toSet();
-        // Also include all other nodes reachable via pathfinding (full path highlighting)
         for (final node in nodes) {
-          final path = matchState.match.map.pathBetween(selectedCo.currentNode, node);
+          final path = matchState.match.map.pathBetween(sc.currentNode, node);
           if (path.isNotEmpty) reachableNodeIds.add(node.id);
         }
       }
@@ -320,6 +323,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // render list so its tap target wins when multiple companies share a castle.
     final slotMap = _buildSlotMap(companies);
 
+    // The "move mode" banner is only shown when the selected company is still
+    // stationary — once setDestination assigns a march, the company is no
+    // longer stationary so the banner auto-hides without clearing selectedId.
+    final selectedCo = selectedId == null
+        ? null
+        : matchState.companies.where((c) => c.id == selectedId).firstOrNull;
+    final showMoveBanner = selectedCo != null &&
+        selectedCo.battleId == null &&
+        (selectedCo.destination == null ||
+            selectedCo.destination!.id == selectedCo.currentNode.id);
+
     // Render companies with the selected/pinned one last so it appears on top
     // of all others at the same position (castle stack).
     final sortedCompanies = selectedId == null
@@ -331,8 +345,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     return Column(
       children: [
-        // Movement hint banner shown when a company is selected.
-        if (selectedId != null)
+        // Movement hint banner shown when a company is selected and stationary
+        // on a road node — indicates the player can tap any node to march there.
+        if (showMoveBanner)
           Container(
             key: const ValueKey('move_hint_banner'),
             color: AppTheme.gold.withAlpha(220),
@@ -385,7 +400,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     final liveOwnership = node is CastleNode
                         ? (castleOwnership[node.id] ?? node.ownership)
                         : null;
-                    final isReachable = selectedId != null && reachableNodeIds.contains(node.id);
+                    final isReachable = showMoveBanner && reachableNodeIds.contains(node.id);
 
                     return Positioned(
                       left: cx - 24,
@@ -599,17 +614,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   ) {
     final selectedId = companyState.selectedCompanyId;
 
+    // Only enter "assign destination" mode when the selected company is
+    // stationary on a road node — i.e. the move-mode banner is visible.
     if (selectedId != null) {
-      // A company is selected — any node tap assigns it as a movement destination.
-      ref.read(companyNotifierProvider.notifier).setDestination(
-            companyId: selectedId,
-            destination: node,
-            map: matchState.match.map,
-          );
-      return;
+      final selectedCo = matchState.companies
+          .where((c) => c.id == selectedId)
+          .firstOrNull;
+      final isInMoveMode = selectedCo != null &&
+          selectedCo.battleId == null &&
+          (selectedCo.destination == null ||
+              selectedCo.destination!.id == selectedCo.currentNode.id);
+
+      if (isInMoveMode) {
+        ref.read(companyNotifierProvider.notifier).setDestination(
+              companyId: selectedId,
+              destination: node,
+              map: matchState.match.map,
+            );
+        return;
+      }
     }
 
-    // No selection: check for multiple stationary player companies at this
+    // No active move-mode: check for multiple stationary player companies at this
     // road junction — if so, show a disambiguation panel (FR-001, User Story 1).
     if (node is RoadJunctionNode) {
       final stationaryAtNode = matchState.companies
