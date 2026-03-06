@@ -10,6 +10,15 @@ import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/theme/app_theme.dart';
 import 'package:iron_and_stone/ui/widgets/split_slider.dart';
 
+/// Per-castle selection state: stores the ID of the company currently shown
+/// "on top" (star highlight) in the roster for each castle node.
+///
+/// Keyed by castle ID so each castle independently remembers its last selection.
+/// NOT autoDispose — persists for the lifetime of the ProviderScope so that
+/// re-opening the same castle always restores the previous selection.
+final castleSelectedCompanyProvider =
+    StateProvider.family<String?, String>((ref, castleId) => null);
+
 /// Screen showing a castle's stats and companies stationed here.
 ///
 /// Castles have no garrison pool — soldiers live only in companies.
@@ -53,9 +62,18 @@ class CastleScreen extends ConsumerWidget {
               .toList();
 
           // All companies at this node (including those passing through).
+          // Sort so the currently selected company appears first (on top in
+          // the roster) — satisfies the "selected always on top" requirement.
+          final castleSelectedId =
+              ref.watch(castleSelectedCompanyProvider(castleId));
           final allCompaniesHere = matchState.companies
               .where((co) => co.currentNode.id == castleId)
-              .toList();
+              .toList()
+            ..sort((a, b) {
+              if (a.id == castleSelectedId) return -1;
+              if (b.id == castleSelectedId) return 1;
+              return 0;
+            });
 
           // Peasant count from stationed companies (drives growth rate).
           final peasantsInCompanies = stationedCompanies.fold<int>(
@@ -131,7 +149,8 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
     // Auto-select the appropriate company as soon as the frame settles so
     // both the castle roster star and the map's on-top render always reflect
     // the same selection:
-    //  • If a company from THIS castle is already selected → keep it.
+    //  • If castleSelectedCompanyProvider already has a valid ID for this
+    //    castle → keep it (persisted from a previous visit).
     //  • Otherwise → select the first player-owned stationary company here.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -141,22 +160,34 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
 
   /// Selects the correct company for this castle if needed.
   ///
-  /// Called once after mount. Picks the first player-owned stationary
-  /// company when nothing at this castle is currently selected.
+  /// Uses the per-castle [castleSelectedCompanyProvider] so each castle
+  /// independently remembers its last selection across navigation pushes.
   void _ensureSelection() {
     final currentId =
-        ref.read(companyNotifierProvider).valueOrNull?.selectedCompanyId;
-    // If the currently selected company belongs to this castle, keep it.
-    final alreadyHere = currentId != null &&
-        widget.companies.any((c) => c.id == currentId);
-    if (alreadyHere) return;
+        ref.read(castleSelectedCompanyProvider(widget.castleId));
+    // If the previously selected company is still present in this castle,
+    // keep it and ensure the map-level selection also reflects it.
+    if (currentId != null &&
+        widget.companies.any((c) => c.id == currentId)) {
+      // Re-sync the map selection to this company in case it drifted
+      // (e.g. player tapped the X on the map banner between visits).
+      ref.read(companyNotifierProvider.notifier).selectCompany(currentId);
+      return;
+    }
 
     // Otherwise auto-select the first player-owned stationary company.
     final first = widget.companies.firstWhere(
       (c) => c.ownership == Ownership.player && _isStationary(c),
       orElse: () => widget.companies.first,
     );
-    ref.read(companyNotifierProvider.notifier).selectCompany(first.id);
+    _selectCompany(first.id);
+  }
+
+  /// Select a company: update both the per-castle provider (for screen
+  /// persistence) and the global company notifier (for map rendering).
+  void _selectCompany(String id) {
+    ref.read(castleSelectedCompanyProvider(widget.castleId).notifier).state = id;
+    ref.read(companyNotifierProvider.notifier).selectCompany(id);
   }
 
   String _roleName(UnitRole role) {
@@ -265,14 +296,15 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
     final companies = widget.companies;
     final mergeMode = _mergeSourceIndex != null;
 
-    // Watch selectedCompanyId — the single source of truth for which company
-    // has the star highlight and is shown on top of the stack on the map.
-    final selectedId =
-        ref.watch(companyNotifierProvider).valueOrNull?.selectedCompanyId;
+    // Watch the per-castle selection provider — this is the source of truth
+    // for which company has the star highlight in the roster.  It persists
+    // across navigation pushes (not autoDispose) and is initialised / kept
+    // in sync by _ensureSelection / _selectCompany.
+    final selectedId = ref.watch(castleSelectedCompanyProvider(widget.castleId));
 
-    // The "front" company is whichever one is selected and belongs to this
-    // castle. Falls back to the first company only for the brief moment before
-    // _ensureSelection fires (one frame).
+    // The "front" company is whichever one is selected and still present at
+    // this castle.  Falls back to the first company only for the brief moment
+    // before _ensureSelection fires (one frame).
     final frontId = (selectedId != null &&
             companies.any((c) => c.id == selectedId))
         ? selectedId
@@ -330,8 +362,8 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
               final index = entry.key;
               final co = entry.value;
               final isSource = index == _mergeSourceIndex;
-              // isFront is driven by the notifier's selectedCompanyId so it
-              // stays consistent with the map's on-top company.
+              // isFront is driven by castleSelectedCompanyProvider so it
+              // persists correctly across navigation re-entries.
               final isFront = !mergeMode && co.id == frontId;
               final stationary = _isStationary(co);
               final statusLabel = stationary ? 'Garrisoned' : 'Defending';
@@ -359,9 +391,7 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                       _showMergePrompt(
                           context, companies[sourceIndex], co);
                     } else {
-                      ref
-                          .read(companyNotifierProvider.notifier)
-                          .selectCompany(co.id);
+                      _selectCompany(co.id);
                     }
                   },
                   onLongPress: (isPlayerOwned && stationary && !mergeMode)
