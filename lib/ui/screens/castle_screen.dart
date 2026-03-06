@@ -133,15 +133,25 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
   @override
   void initState() {
     super.initState();
-    // Restore the front index from the currently selected company, falling
-    // back to 0 if nothing is selected or the selected company is not in
-    // this castle's list.
+    // Restore the front index from the currently selected company.
+    // We try immediately; if the provider is still loading we schedule a
+    // post-frame retry so the highlight updates as soon as data is available.
+    _frontIndex = _indexOfSelected();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = _indexOfSelected();
+      if (idx != _frontIndex) setState(() => _frontIndex = idx);
+    });
+  }
+
+  /// Returns the index in [widget.companies] that matches the currently
+  /// selected company ID, or 0 if nothing matches.
+  int _indexOfSelected() {
     final selectedId =
         ref.read(companyNotifierProvider).valueOrNull?.selectedCompanyId;
-    final idx = selectedId == null
-        ? -1
-        : widget.companies.indexWhere((c) => c.id == selectedId);
-    _frontIndex = idx >= 0 ? idx : 0;
+    if (selectedId == null) return 0;
+    final idx = widget.companies.indexWhere((c) => c.id == selectedId);
+    return idx >= 0 ? idx : 0;
   }
 
   String _roleName(UnitRole role) {
@@ -348,10 +358,6 @@ class _CompaniesRosterCardState extends ConsumerState<_CompaniesRosterCard> {
                       ref
                           .read(companyNotifierProvider.notifier)
                           .selectCompany(co.id);
-                      // Return to map so the player can immediately tap a
-                      // destination node — the selected company marker will be
-                      // pinned to slot 0 (centre) and shown highlighted.
-                      if (context.mounted) Navigator.of(context).pop();
                     }
                   },
                   onLongPress: (isPlayerOwned && stationary && !mergeMode)
