@@ -91,9 +91,15 @@ final class TickMatch {
     updatedCompanies = aiResult.$2;
 
     // 5. Detect collisions
+    // Pass the live castle ownership map so CheckCollisions uses up-to-date
+    // owners (not the stale static CastleNode.ownership from match.map).
+    final liveCastleOwnership = {
+      for (final c in updatedCastles) c.id: c.ownership,
+    };
     final triggers = const CheckCollisions().check(
       map: match.map,
       companies: updatedCompanies,
+      castleOwnership: liveCastleOwnership,
     );
 
     // ---------------------------------------------------------------------------
@@ -129,6 +135,9 @@ final class TickMatch {
     // ---------------------------------------------------------------------------
     var currentActiveBattles = List<ActiveBattle>.from(activeBattles);
     final existingBattleNodeIds = {for (final b in currentActiveBattles) b.nodeId};
+    // Track battles created this tick so Phase B skips them (they must be
+    // visible to the UI for at least one full tick before their first round).
+    final newBattleIds = <String>{};
 
     for (final trigger in triggers) {
       final nodeId = trigger.location.id;
@@ -261,6 +270,7 @@ final class TickMatch {
       );
       currentActiveBattles.add(newBattle);
       existingBattleNodeIds.add(nodeId);
+      newBattleIds.add(newBattle.id); // don't advance this battle in Phase B
 
       // Tag all involved companies with this battle's id.
       final battleId = newBattle.id;
@@ -274,11 +284,74 @@ final class TickMatch {
     }
 
     // ---------------------------------------------------------------------------
+    // Phase A-R: reinforcement sweep — assign any free company at an existing
+    // battle node to that battle (independent of trigger detection).
+    // This handles companies that arrived while all existing combatants already
+    // have a battleId, so CheckCollisions emitted no trigger for that node.
+    // ---------------------------------------------------------------------------
+    for (var i = 0; i < currentActiveBattles.length; i++) {
+      var ab = currentActiveBattles[i];
+      if (newBattleIds.contains(ab.id)) continue; // just created this tick
+
+      final newArrivals = updatedCompanies.where((c) {
+        if (c.currentNode.id != ab.nodeId) return false;
+        if (c.battleId == ab.id) return false; // already in this battle
+        if (c.battleId != null) return false;   // in a different battle
+        return true;
+      }).toList();
+
+      if (newArrivals.isEmpty) continue;
+
+      for (final newCo in newArrivals) {
+        final side = newCo.ownership == ab.attackerOwnership
+            ? BattleSide.attackers
+            : BattleSide.defenders;
+
+        final updatedBattle = ResolveBattle.addReinforcement(
+          battle: ab.battle,
+          reinforcement: newCo.company,
+          side: side,
+        );
+
+        final newAttackerIds = side == BattleSide.attackers
+            ? [...ab.attackerCompanyIds, newCo.id]
+            : ab.attackerCompanyIds.toList();
+        final newDefenderIds = side == BattleSide.defenders
+            ? [...ab.defenderCompanyIds, newCo.id]
+            : ab.defenderCompanyIds.toList();
+
+        ab = ActiveBattle(
+          nodeId: ab.nodeId,
+          attackerCompanyIds: newAttackerIds,
+          defenderCompanyIds: newDefenderIds,
+          attackerOwnership: ab.attackerOwnership,
+          battle: updatedBattle,
+        );
+      }
+
+      currentActiveBattles[i] = ab;
+
+      final battleId = ab.id;
+      final newArrivalIds = newArrivals.map((c) => c.id).toSet();
+      updatedCompanies = [
+        for (final co in updatedCompanies)
+          if (newArrivalIds.contains(co.id))
+            co.copyWith(battleId: battleId)
+          else
+            co,
+      ];
+    }
+
+    // ---------------------------------------------------------------------------
     // Phase B: advance each unresolved ActiveBattle one round
     // ---------------------------------------------------------------------------
     final advancedBattles = <ActiveBattle>[];
     for (final ab in currentActiveBattles) {
-      if (ab.battle.outcome != null) {
+      if (newBattleIds.contains(ab.id)) {
+        // Newly created this tick — carry forward without advancing so the UI
+        // can render the BattleIndicator for at least one tick.
+        advancedBattles.add(ab);
+      } else if (ab.battle.outcome != null) {
         // Already resolved — carry forward for Phase C cleanup.
         advancedBattles.add(ab);
       } else {

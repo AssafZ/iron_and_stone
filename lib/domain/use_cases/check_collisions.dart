@@ -128,26 +128,46 @@ final class CheckCollisions {
   const CheckCollisions();
 
   /// Returns a list of [BattleTrigger]s detected among the given [companies].
+  ///
+  /// [castleOwnership] is a map from castle node ID to its **live** ownership.
+  /// This must reflect any ownership transfers that have already happened this
+  /// tick so that a company that just captured a castle is not immediately
+  /// treated as an enemy there again.
+  ///
+  /// Companies already locked in a battle ([CompanyOnMap.battleId] != null) are
+  /// excluded from new-trigger detection — they are already being processed by
+  /// the active battle loop and must not spawn duplicate triggers.
   List<BattleTrigger> check({
     required GameMap map,
     required List<CompanyOnMap> companies,
+    Map<String, Ownership> castleOwnership = const {},
   }) {
     final triggers = <BattleTrigger>[];
+
+    // Only consider companies that are NOT already in an active battle.
+    // Companies with a battleId are frozen and handled by the battle loop.
+    final freeCompanies = companies.where((c) => c.battleId == null).toList();
+
+    // Helper: resolve live castle ownership (falls back to static CastleNode.ownership).
+    Ownership liveOwnership(CastleNode node) =>
+        castleOwnership[node.id] ?? node.ownership;
 
     // FR-003: Company arriving at an enemy castle node that has garrison defenders.
     // Only stationary companies (destination == null OR destination == currentNode)
     // with at least 1 soldier at the castle count as garrison.
-    for (final co in companies) {
+    for (final co in freeCompanies) {
       final node = co.currentNode;
       if (node is! CastleNode) continue;
-      if (!isEnemy(co.ownership, node.ownership)) continue;
+      final castleOwner = liveOwnership(node);
+      if (!isEnemy(co.ownership, castleOwner)) continue;
 
       // Collect garrison defenders: companies at this castle node belonging to
       // the castle's owner that are stationary and have >= 1 soldier.
+      // Use live castle ownership (castleOwner) not the static node.ownership.
       final garrisonDefenders = companies.where((c) {
         if (c.id == co.id) return false;
         if (c.currentNode.id != node.id) return false;
-        if (c.ownership != node.ownership) return false;
+        if (c.ownership != castleOwner) return false;
         final isStationary = c.destination == null || c.destination!.id == c.currentNode.id;
         if (!isStationary) return false;
         return c.company.totalSoldiers.value > 0;
@@ -163,13 +183,13 @@ final class CheckCollisions {
       );
       if (!alreadyEmitted) {
         final allInvolvedIds = [
-          // All attackers (enemies of the castle owner) at this node
-          ...companies
+          // All free attackers (enemies of the castle owner) at this node
+          ...freeCompanies
               .where((c) =>
                   c.currentNode.id == node.id &&
-                  isEnemy(c.ownership, node.ownership))
+                  isEnemy(c.ownership, castleOwner))
               .map((c) => c.id),
-          // All garrison defenders
+          // All garrison defenders (may include battling ones already there)
           ...garrisonDefenders.map((c) => c.id),
         ];
         triggers.add(
@@ -183,9 +203,10 @@ final class CheckCollisions {
     }
 
     // FR-001: Opposing Companies on the same node (non-castle-assault nodes).
-    // Group companies by their current node id.
+    // Group FREE companies by their current node id (companies in a battle are
+    // already handled by the active battle loop — exclude them here).
     final byNode = <String, List<CompanyOnMap>>{};
-    for (final co in companies) {
+    for (final co in freeCompanies) {
       byNode.putIfAbsent(co.currentNode.id, () => []).add(co);
     }
 
