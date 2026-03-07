@@ -2280,6 +2280,67 @@ void main() {
         },
       );
     });
+
+    // -------------------------------------------------------------------------
+    // T027 [US4]: post-tick off-road invariant
+    // -------------------------------------------------------------------------
+    // After any tick every CompanyOnMap must satisfy the on-road invariant:
+    //   progress == 0.0  (company is at a named node)
+    //   OR there exists a RoadEdge whose from.id == co.currentNode.id
+    //   (company is mid-road on a valid segment).
+    // -------------------------------------------------------------------------
+    group('T027 [US4]: post-tick off-road invariant', () {
+      test(
+        'after a tick every company is either at a node (progress=0) or has '
+        'a valid outgoing edge from its currentNode',
+        () {
+          final map = _makeMinimalMap();
+          final playerCastle =
+              map.nodes.whereType<CastleNode>().firstWhere((n) => n.id == 'pc');
+          final aiCastle =
+              map.nodes.whereType<CastleNode>().firstWhere((n) => n.id == 'ac');
+
+          // Company mid-segment: it has a destination and will advance.
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            destination: aiCastle,
+          );
+
+          final result = const TickMatch().tick(
+            match: Match(
+              map: map,
+              humanPlayer: Ownership.player,
+              phase: MatchPhase.playing,
+            ),
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo],
+            activeBattles: const [],
+          );
+
+          for (final co in result.companies) {
+            // Invariant: progress == 0 (at a node) OR
+            //            some outgoing edge exists from currentNode.
+            final atNode = co.progress == 0.0;
+            final hasOutgoingEdge = map.edges
+                .any((e) => e.from.id == co.currentNode.id);
+            expect(
+              atNode || hasOutgoingEdge,
+              isTrue,
+              reason:
+                  'Company ${co.id} at node ${co.currentNode.id} with '
+                  'progress=${co.progress} violates the off-road invariant: '
+                  'it is mid-road but has no outgoing edge from currentNode',
+            );
+          }
+        },
+      );
+    });
   });
 }
 

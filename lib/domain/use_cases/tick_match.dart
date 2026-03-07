@@ -451,6 +451,23 @@ final class TickMatch {
     // 6. Victory check
     final outcome = _checkVictory(updatedCastles);
 
+    // ---------------------------------------------------------------------------
+    // Debug-mode invariant: every company must be on a valid road position.
+    // Either progress == 0.0 (company is exactly at a named node) or there
+    // exists an outgoing edge from its currentNode (company is mid-road on a
+    // known segment). This fires only in debug builds (assert is a no-op in
+    // release mode) and catches any code path that would produce a floating
+    // company position not backed by the road network.
+    // ---------------------------------------------------------------------------
+    assert(
+      updatedCompanies.every((co) {
+        if (co.progress == 0.0) return true;
+        return match.map.edges.any((e) => e.from.id == co.currentNode.id);
+      }),
+      'Post-tick off-road invariant violated: at least one company has '
+      'progress > 0 but its currentNode has no outgoing edge in the map.',
+    );
+
     return TickResult(
       castles: updatedCastles,
       companies: updatedCompanies,

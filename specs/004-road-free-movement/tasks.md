@@ -131,14 +131,14 @@
 
 ### Tests for User Story 4 ⚠️ Write and confirm FAILING before implementation
 
-- [ ] T026 [P] [US4] *(Confirmation only — no new test file)* Verify the failing test in T012-b (`setMidRoadDestination` throws `MoveCompanyException` for a segment not in the map) is still red before T016 is implemented. T012-b is the canonical test; this task is a pre-implementation gate, not a separate test.
-- [ ] T027 [P] [US4] Write failing test in `test/domain/use_cases/tick_match_test.dart` — after any tick, assert every `CompanyOnMap` in the result satisfies: either `progress == 0.0` (at a node) or there exists a `RoadEdge` with `from.id == co.currentNode.id`
+- [x] T026 [P] [US4] *(Confirmation only — no new test file)* Verify the failing test in T012-b (`setMidRoadDestination` throws `MoveCompanyException` for a segment not in the map) is still red before T016 is implemented. T012-b is the canonical test; this task is a pre-implementation gate, not a separate test.
+- [x] T027 [P] [US4] Write failing test in `test/domain/use_cases/tick_match_test.dart` — after any tick, assert every `CompanyOnMap` in the result satisfies: either `progress == 0.0` (at a node) or there exists a `RoadEdge` with `from.id == co.currentNode.id`
 
 ### Implementation for User Story 4
 
 > **Checkpoint (no task)**: T016's `setMidRoadDestination` already validates that the supplied `RoadPosition` references a segment present in the map (segment-existence guard from T012-b / T016 implementation). Before starting T029, confirm this guard is in place; if not, tighten the validation in `lib/domain/use_cases/move_company.dart` as part of T016.
 
-- [ ] T029 [US4] Modify `lib/domain/use_cases/tick_match.dart` — add a post-tick `assert` (debug-mode invariant) that every company in `updatedCompanies` satisfies the off-road invariant; confirm T027 passes
+- [x] T029 [US4] Modify `lib/domain/use_cases/tick_match.dart` — add a post-tick `assert` (debug-mode invariant) that every company in `updatedCompanies` satisfies the off-road invariant; confirm T027 passes
 
 **Checkpoint**: Off-road positions are impossible via any public API. US4 invariant holds.
 
