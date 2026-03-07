@@ -20,9 +20,9 @@
 
 **Purpose**: Verify branch, tooling, and confirm existing tests are green before any changes
 
-- [ ] T001 Confirm branch is `004-road-free-movement` and `flutter test` passes with zero failures
-- [ ] T002 [P] Confirm `flutter analyze` reports zero issues (baseline before changes)
-- [ ] T003 [P] Read `specs/004-road-free-movement/quickstart.md` to confirm implementation order and constants
+- [X] T001 Confirm branch is `004-road-free-movement` and `flutter test` passes with zero failures
+- [X] T002 [P] Confirm `flutter analyze` reports zero issues (baseline before changes)
+- [X] T003 [P] Read `specs/004-road-free-movement/quickstart.md` to confirm implementation order and constants
 
 **Checkpoint**: All existing tests green, analysis clean, constants known → ready for foundational work
 
