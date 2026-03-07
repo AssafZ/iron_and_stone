@@ -113,11 +113,11 @@
 
 ### Tests for User Story 3 ⚠️ Write and confirm FAILING before implementation
 
-- [ ] T024 [US3] Tests already written in T010 (foundational). Confirm the `ArgumentError` test (T010-b) is still failing before T025.
+- [x] T024 [US3] Tests already written in T010 (foundational). Confirm the `ArgumentError` test (T010-b) is still failing before T025.
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Implementation already delivered in T011 (foundational). Run `flutter test test/domain/entities/game_map_test.dart` and confirm all castle-validation tests pass including T010-b.
+- [x] T025 [US3] Implementation already delivered in T011 (foundational). Run `flutter test test/domain/entities/game_map_test.dart` and confirm all castle-validation tests pass including T010-b.
 
 **Checkpoint**: `GameMap` rejects off-road castles. `GameMapFixture` passes. US3 is complete.
 
