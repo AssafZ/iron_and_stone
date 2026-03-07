@@ -57,6 +57,10 @@ final class SplitCompany {
         company: domainResult.kept,
         ownership: company.ownership,
         currentNode: company.currentNode,
+        progress: company.progress,
+        // Mid-road destination is cleared: the split halves are now
+        // stationary at the same (currentNode, progress) position.
+        midRoadDestination: null,
       );
 
       final splitOff = CompanyOnMap(
@@ -64,6 +68,10 @@ final class SplitCompany {
         company: domainResult.splitOff,
         ownership: company.ownership,
         currentNode: company.currentNode,
+        progress: company.progress,
+        // Mid-road destination is cleared: the split halves are now
+        // stationary at the same (currentNode, progress) position.
+        midRoadDestination: null,
       );
 
       return SplitCompanyResult(kept: kept, splitOff: splitOff);

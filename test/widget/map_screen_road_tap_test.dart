@@ -1,10 +1,19 @@
 // T014 — Failing widget tests for road tap → setMidRoadDestination (US1)
 // Red-Green-Refactor: these tests must FAIL before T017 / T018 implementation.
+// T031 [US5] — Splitting a mid-road company produces two markers at distinct
+// canvas positions, each independently tappable.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/company.dart';
+import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
+import 'package:iron_and_stone/domain/entities/match.dart';
+import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
+import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -189,4 +198,174 @@ void main() {
       );
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // T031 [US5]: splitting a mid-road company — two markers, distinct positions
+  // ---------------------------------------------------------------------------
+
+  group('T031 [US5]: split mid-road company produces two distinct, tappable markers',
+      () {
+    testWidgets(
+      '(a) after split two company markers appear at distinct canvas positions',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              matchNotifierProvider.overrideWith(_FakeMatchNotifier.new),
+            ],
+            child: const MaterialApp(home: MapScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The mid-road player company marker must be present.
+        final markerFinder =
+            find.byKey(const ValueKey('company_marker_mid_co'));
+        expect(markerFinder, findsOneWidget,
+            reason: 'mid-road company marker must be visible before split');
+
+        // Long-press to open the split slider.
+        await tester.longPress(markerFinder);
+        await tester.pumpAndSettle();
+
+        // Assign at least 1 soldier to Company B by tapping the increment
+        // button for the warrior role (the only role in our test company).
+        final incButton = find.byKey(const ValueKey('split_inc_warrior'));
+        expect(incButton, findsOneWidget,
+            reason: 'warrior increment button must be present');
+        await tester.tap(incButton);
+        await tester.pumpAndSettle();
+
+        // Confirm the split (split_confirm_button is now enabled).
+        final confirmButton =
+            find.byKey(const ValueKey('split_confirm_button'));
+        expect(confirmButton, findsOneWidget,
+            reason: 'split confirm button must be present');
+        await tester.tap(confirmButton);
+        await tester.pumpAndSettle();
+
+        // After the split there must be exactly 2 company markers.
+        // Use a general search for all company_marker_ keys.
+        final markerWidgets = find.byWidgetPredicate(
+          (w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('company_marker_'),
+        );
+        expect(markerWidgets, findsNWidgets(2),
+            reason: 'split must produce exactly 2 company markers');
+
+        // Verify the two markers are at distinct canvas positions.
+        final markerList = tester.widgetList(markerWidgets).toList();
+        final positions = markerList
+            .map((w) => tester.getCenter(find.byWidget(w)))
+            .toList();
+
+        expect(positions.length, equals(2));
+        expect(positions[0], isNot(equals(positions[1])),
+            reason:
+                'two mid-road companies at the same position must appear at '
+                'distinct canvas coordinates so each has its own tap target');
+      },
+    );
+
+    testWidgets(
+      '(b) each of the two post-split markers responds to tap independently',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              matchNotifierProvider.overrideWith(_FakeMatchNotifier.new),
+            ],
+            child: const MaterialApp(home: MapScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Long-press and confirm split (assign 1 warrior to Company B first).
+        await tester.longPress(
+            find.byKey(const ValueKey('company_marker_mid_co')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('split_inc_warrior')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('split_confirm_button')));
+        await tester.pumpAndSettle();
+
+        // Find both markers.
+        final markerWidgets = find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey &&
+              (w.key as ValueKey).value.toString().startsWith('company_marker_'),
+        );
+        expect(markerWidgets, findsNWidgets(2));
+
+        // Collect the ValueKey values for both markers.
+        final markerKeys = tester
+            .widgetList(markerWidgets)
+            .map((w) => (w.key as ValueKey).value as String)
+            .toList()
+          ..sort();
+
+        // Tap marker 0 → it becomes selected.
+        await tester.tap(find.byKey(ValueKey(markerKeys[0])));
+        await tester.pumpAndSettle();
+
+        final element = tester.element(find.byType(MapScreen));
+        final container = ProviderScope.containerOf(element);
+        final companyState =
+            container.read(companyNotifierProvider).valueOrNull;
+        expect(companyState?.selectedCompanyId, isNotNull,
+            reason: 'tapping the first marker must select it');
+
+        final firstSelectedId = companyState!.selectedCompanyId!;
+
+        // Deselect and tap marker 1.
+        container.read(companyNotifierProvider.notifier).clearSelection();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(ValueKey(markerKeys[1])));
+        await tester.pumpAndSettle();
+
+        final companyState2 =
+            container.read(companyNotifierProvider).valueOrNull;
+        final secondSelectedId = companyState2?.selectedCompanyId;
+        expect(secondSelectedId, isNotNull,
+            reason: 'tapping the second marker must select it');
+        expect(secondSelectedId, isNot(equals(firstSelectedId)),
+            reason:
+                'each marker must correspond to a different company — '
+                'tapping each must select a different company');
+      },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Fake MatchNotifier for T031: seeds a mid-road stationary company
+// ---------------------------------------------------------------------------
+
+class _FakeMatchNotifier extends MatchNotifier {
+  @override
+  Future<MatchState> build() async {
+    final map = GameMapFixture.build();
+    final j1 = map.nodes.firstWhere((n) => n.id == 'j1');
+
+    // A mid-road stationary company: progress 0.5 between player_castle and
+    // j1, no destination, no midRoadDestination (arrived and stopped).
+    final midRoadCo = CompanyOnMap(
+      id: 'mid_co',
+      ownership: Ownership.player,
+      currentNode: j1,
+      progress: 0.5,
+      company: Company(composition: {UnitRole.warrior: 10}),
+    );
+
+    return MatchState(
+      match: Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      ),
+      castles: const [],
+      companies: [midRoadCo],
+      activeBattles: const [],
+    );
+  }
 }

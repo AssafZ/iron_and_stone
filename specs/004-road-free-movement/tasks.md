@@ -152,13 +152,13 @@
 
 ### Tests for User Story 5 ⚠️ Write and confirm FAILING before implementation
 
-- [ ] T030 [P] [US5] Write failing unit test for mid-road slot grouping in `test/state/company_notifier_test.dart` — two companies at same `(currentNode, progress = 0.5)` receive different offsets from `_buildSlotMap`; three companies at same position all receive distinct offsets
-- [ ] T031 [P] [US5] Write failing widget test in `test/widget/map_screen_road_tap_test.dart` — perform a split on a mid-road company; assert two markers appear at distinct canvas positions; assert each marker responds to a tap independently
+- [x] T030 [P] [US5] Write failing unit test for mid-road slot grouping in `test/state/company_notifier_test.dart` — two companies at same `(currentNode, progress = 0.5)` receive different offsets from `_buildSlotMap`; three companies at same position all receive distinct offsets
+- [x] T031 [P] [US5] Write failing widget test in `test/widget/map_screen_road_tap_test.dart` — perform a split on a mid-road company; assert two markers appear at distinct canvas positions; assert each marker responds to a tap independently
 
 ### Implementation for User Story 5
 
-- [ ] T032 [US5] Modify `lib/state/company_notifier.dart` (`_rebuildOccupancyMap` helper) and `lib/ui/screens/map_screen.dart` (`_buildSlotMap`) — extend grouping key to include mid-road composite `"${currentNode.id}__${nextNodeId}_${progress.toStringAsFixed(3)}"` for stationary mid-road companies; confirm T030 passes
-- [ ] T033 [US5] Modify `lib/state/company_notifier.dart` (`splitCompany`) — when the original company has a non-null `midRoadDestination`, both `kept` and `splitOff` inherit the same `(currentNode, progress)` with `midRoadDestination` cleared (they are now stationary); confirm T031 passes
+- [x] T032 [US5] Modify `lib/state/company_notifier.dart` (`_rebuildOccupancyMap` helper) and `lib/ui/screens/map_screen.dart` (`_buildSlotMap`) — extend grouping key to include mid-road composite `"${currentNode.id}__${nextNodeId}_${progress.toStringAsFixed(3)}"` for stationary mid-road companies; confirm T030 passes
+- [x] T033 [US5] Modify `lib/state/company_notifier.dart` (`splitCompany`) — when the original company has a non-null `midRoadDestination`, both `kept` and `splitOff` inherit the same `(currentNode, progress)` with `midRoadDestination` cleared (they are now stationary); confirm T031 passes
 
 **Checkpoint**: Mid-road splits produce two offset, individually tappable markers. US5 complete.
 
