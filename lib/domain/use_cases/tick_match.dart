@@ -265,6 +265,8 @@ final class TickMatch {
           kind: trigger.kind == BattleTriggerKind.castleAssault
               ? BattleKind.castleAssault
               : BattleKind.roadCollision,
+          initialAttackers: attackerCompanies,
+          initialDefenders: defenderCompanies,
         ),
       );
       currentActiveBattles.add(newBattle);

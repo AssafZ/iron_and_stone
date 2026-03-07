@@ -341,6 +341,126 @@ void main() {
       expect(find.text('Return to Map'), findsOneWidget);
     });
 
+    // T042b — summary shows the correct outcome text from resolvedBattles
+    testWidgets(
+        'T042b: summary shows "Victory" when outcome is attackersWin',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.attackersWin);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Victory', findRichText: true),
+        findsAny,
+        reason: 'Expected "Victory" for attackersWin',
+      );
+    });
+
+    testWidgets(
+        'T042b-defeat: summary shows "Defeat" when outcome is defendersWin',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.defendersWin);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Defeat', findRichText: true),
+        findsAny,
+        reason: 'Expected "Defeat" for defendersWin',
+      );
+    });
+
+    testWidgets(
+        'T042b-draw: summary shows "Draw" when outcome is draw',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.draw);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Draw', findRichText: true),
+        findsAny,
+        reason: 'Expected "Draw" for draw',
+      );
+    });
+
+    // T042c — summary shows troop breakdown columns for both sides
+    testWidgets(
+        'T042c: summary shows Attackers and Defenders columns with troop counts',
+        (tester) async {
+      final ab = buildActiveBattle(attackerWarriors: 8, defenderKnights: 5);
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle();
+      await tester.pump();
+
+      // Both side labels present in summary.
+      expect(find.text('Attackers'), findsOneWidget);
+      expect(find.text('Defenders'), findsOneWidget);
+      // Initial attacker warriors shown as '8'.
+      expect(find.text('8'), findsWidgets);
+      // Initial defender knights shown as '5'.
+      expect(find.text('5'), findsWidgets);
+    });
+
     // T043 — tapping "Next Round" via the real advanceBattleRound updates the
     // round number displayed in the AppBar.
     testWidgets(
@@ -488,14 +608,17 @@ class _ResolvableMatchNotifier extends MatchNotifier {
     return base.copyWith(activeBattles: [_ab]);
   }
 
-  /// Remove the battle from state (simulates post-battle cleanup).
-  /// The screen will fall back to its cached [_lastBattle] snapshot to render
-  /// [_BattleSummary].
-  void resolveBattle() {
+  /// Remove the battle from state, adding a resolved entry with [outcome].
+  ///
+  /// Simulates the post-battle cleanup done by [MatchNotifier.advanceBattleRound].
+  void resolveBattle({BattleOutcome outcome = BattleOutcome.attackersWin}) {
     final current = state.valueOrNull;
     if (current == null) return;
-    // Simply remove the active battle — no need to mutate _ab.
-    state = AsyncData(current.copyWith(activeBattles: const []));
+    final resolvedBattle = _ab.battle.copyWith(outcome: outcome);
+    state = AsyncData(current.copyWith(
+      activeBattles: const [],
+      resolvedBattles: {_ab.id: resolvedBattle},
+    ));
   }
 }
 

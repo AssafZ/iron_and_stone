@@ -96,6 +96,10 @@ String _encodeBattle(Battle battle) {
     'defenderHp': dhp,
     'attackers': encodeCompanies(battle.attackers),
     'defenders': encodeCompanies(battle.defenders),
+    if (battle.initialAttackers != null)
+      'initialAttackers': encodeCompanies(battle.initialAttackers!),
+    if (battle.initialDefenders != null)
+      'initialDefenders': encodeCompanies(battle.initialDefenders!),
   });
 }
 
@@ -165,6 +169,12 @@ Battle _decodeBattle(String json) {
     roundLog: roundLog,
     attackerHp: attackerHp,
     defenderHp: defenderHp,
+    initialAttackers: (raw['initialAttackers'] as List<dynamic>?)
+        ?.map((e) => decodeCompany(e as Map<String, dynamic>))
+        .toList(),
+    initialDefenders: (raw['initialDefenders'] as List<dynamic>?)
+        ?.map((e) => decodeCompany(e as Map<String, dynamic>))
+        .toList(),
   );
 }
 

@@ -95,7 +95,7 @@ final class BattleEngine {
         ? [Company(composition: {UnitRole.peasant: 0})]
         : nextDefenders;
 
-    final updatedBattle = Battle(
+    final updatedBattle = current.copyWith(
       attackers: storedAttackers,
       defenders: storedDefenders,
       roundNumber: current.roundNumber + 1,
