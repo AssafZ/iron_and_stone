@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/domain/entities/battle.dart';
@@ -47,6 +48,11 @@ final class _BattleScreenState extends ConsumerState<BattleScreen> {
           final activeBattle = matchState.activeBattles
               .firstWhereOrNull((b) => b.id == battleId);
 
+          debugPrint('[BattleScreen] build: battleId=$battleId, '
+              'activeBattle=${activeBattle != null ? "round ${activeBattle.battle.roundNumber}/outcome=${activeBattle.battle.outcome}" : "null"}, '
+              'activeBattles=${matchState.activeBattles.map((b) => b.id).toList()}, '
+              'phase=${matchState.match.phase}');
+
           if (activeBattle != null) {
             // Cache the live battle so we can show it in _BattleSummary after
             // the battle is resolved.
@@ -70,9 +76,12 @@ final class _BattleScreenState extends ConsumerState<BattleScreen> {
           final battle = activeBattle.battle;
           return _buildBattleScaffold(
             battle: battle,
-            onNextRound: () => ref
-                .read(matchNotifierProvider.notifier)
-                .advanceBattleRound(battleId),
+            onNextRound: () {
+              debugPrint('[BattleScreen] onNextRound tapped — calling advanceBattleRound($battleId)');
+              ref
+                  .read(matchNotifierProvider.notifier)
+                  .advanceBattleRound(battleId);
+            },
           );
         },
       );

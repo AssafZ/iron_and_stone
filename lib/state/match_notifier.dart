@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:iron_and_stone/data/drift/match_dao.dart';
 import 'package:iron_and_stone/domain/entities/active_battle.dart';
 import 'package:iron_and_stone/domain/entities/battle.dart';
@@ -124,7 +125,10 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     // the player is focused on the battle screen, and could overwrite the
     // battle state written by advanceBattleRound in edge cases where the DAO
     // persist callback fires between two rapid taps.
-    if (current.match.phase == MatchPhase.inBattle) return null;
+    if (current.match.phase == MatchPhase.inBattle) {
+      debugPrint('[MatchNotifier] tick() skipped — phase=inBattle, activeBattles=${current.activeBattles.length}');
+      return null;
+    }
 
     // TickMatch now includes AiController decision + application internally,
     // so result.companies may include newly AI-deployed companies.
@@ -201,13 +205,23 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
     // on the freshest snapshot even if a concurrent tick() wrote new state
     // between the button tap and this point.
     final current = state.valueOrNull;
+    debugPrint('[MatchNotifier] advanceBattleRound($battleId) called — '
+        'state=${current == null ? "null" : "loaded"}, '
+        'phase=${current?.match.phase}, '
+        'activeBattles=${current?.activeBattles.map((b) => "${b.id}:r${b.battle.roundNumber}:outcome=${b.battle.outcome}").toList()}');
     if (current == null) return;
 
     final idx = current.activeBattles.indexWhere((ab) => ab.id == battleId);
-    if (idx < 0) return; // no-op: unknown battleId
+    if (idx < 0) {
+      debugPrint('[MatchNotifier] advanceBattleRound: battle $battleId NOT FOUND in activeBattles — no-op');
+      return; // no-op: unknown battleId
+    }
 
     final advanced =
         const AdvanceBattle().advance(current.activeBattles[idx]);
+
+    debugPrint('[MatchNotifier] advanceBattleRound: before=r${current.activeBattles[idx].battle.roundNumber}/outcome=${current.activeBattles[idx].battle.outcome}, '
+        'after=r${advanced.battle.roundNumber}/outcome=${advanced.battle.outcome}');
 
     final newBattles = List<ActiveBattle>.from(current.activeBattles)
       ..[idx] = advanced;
@@ -227,11 +241,15 @@ class MatchNotifier extends AsyncNotifier<MatchState> {
           phase: stillInBattle ? MatchPhase.inBattle : MatchPhase.playing,
         ),
       );
+      debugPrint('[MatchNotifier] advanceBattleRound: battle RESOLVED → outcome=${advanced.battle.outcome}, '
+          'remaining battles=${afterCleanup.activeBattles.length}, phase=${newState.match.phase}');
     } else {
       newState = current.copyWith(activeBattles: newBattles);
+      debugPrint('[MatchNotifier] advanceBattleRound: battle ongoing → now round ${advanced.battle.roundNumber}');
     }
 
     state = AsyncData(newState);
+    debugPrint('[MatchNotifier] advanceBattleRound: state updated, activeBattles now=${newState.activeBattles.length}');
 
     try {
       await _dao?.saveMatch(matchId: _persistedMatchId, state: newState);
