@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Companies can move to and be positioned at any point on the road, not just road-junctions or castles. Companies cannot move or be placed on non-road points. Castles must be accessible and placed on roads."
 
+## Clarifications
+
+### Session 2026-03-07
+
+- Q: How does the player initiate a proximity merge (what gesture surfaces the merge option)? → A: While one company is selected, tapping a nearby friendly company within the proximity threshold shows the same merge-prompt dialog as the existing co-location merge — no new UI chrome required.
+- Q: When a marching company passes through an intermediate named node en route to a mid-road destination, does it snap to that node or glide through continuously? → A: The company snaps to the named node (node-checkpoint model). Each inter-node segment is traversed as a discrete step; the company's position is expressed as a named node plus fractional progress toward the next node, exactly as today. A mid-road stop is represented as a fractional position short of 1.0 on the final segment.
+- Q: When the target company moves during a proximity merge, does the initiator chase indefinitely or is the merge cancelled if the target drifts too far? → A: The initiator re-evaluates the target's position every tick. If the road distance between initiator and target exceeds the proximity threshold at any tick, the merge is automatically cancelled and both companies revert to independent status. If the distance stays within the threshold the initiator keeps chasing until it arrives.
+- Q: How should two enemy companies moving toward each other on the same road segment be handled — must they land on the exact same progress value, or is approaching-direction sufficient to trigger a battle? → A: Approaching-direction is sufficient. At each tick, if two enemy companies are on the same road segment and their progress values indicate they are moving toward each other (i.e. would cross within that tick), a battle is triggered at the midpoint of their current positions on that segment. Exact progress-value overlap is not required.
+- Q: What unit is the proximity threshold for merge eligibility expressed in — map distance units or seconds of march time? → A: Map distance units (the same unit as `RoadEdge.length`). The threshold is a fixed distance value, speed-independent, and directly comparable to existing road-segment length values.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Tap Any Point on a Road to Send a Company There (Priority: P1)
@@ -100,28 +110,31 @@ The player does not need to march both companies to exactly the same road point 
 
 **Why this priority**: Requiring pixel-perfect co-location before merging is an artificial friction that is especially painful with continuous positioning. Proximity-based merge makes the feature discoverable and reduces micromanagement. It is lower priority than the core positioning stories because the existing merge mechanic still works for co-located companies.
 
-**Independent Test**: Place two friendly player companies close to each other on the same road (but not at exactly the same point). Select one company, then trigger a merge with the nearby company. The first company must visibly march toward the second; when it arrives, a single merged company must appear at the second company's position.
+**Independent Test**: Place two friendly player companies close to each other on the same road (but not at exactly the same point). Select one company, then tap the nearby friendly company. The same merge-prompt dialog that appears for co-located companies must be shown; confirming it must cause the first company to visibly march toward the second; when it arrives, a single merged company must appear at the second company's position.
 
 **Acceptance Scenarios**:
 
-1. **Given** two friendly companies are within the proximity threshold on the same road, **When** the player selects one and initiates a merge with the other, **Then** the selected company begins marching toward the target company's position.
+1. **Given** two friendly companies are within the proximity threshold on the same road, **When** the player selects one and taps the other, **Then** the merge-prompt dialog is shown — identical to the dialog shown for co-located companies.
 2. **Given** the initiating company is marching toward the merge target, **When** the initiating company arrives at the target's road position, **Then** the two companies are merged into one at that position — the initiating company ceases to exist as a separate entity.
 3. **Given** two friendly companies are farther apart than the proximity threshold, **When** the player attempts to initiate a proximity merge, **Then** the merge option is not offered — the companies must be marched closer before a merge can be triggered.
-4. **Given** a merge is in progress (initiator is marching to target), **When** the target company moves away before the initiator arrives, **Then** the initiating company continues marching toward the target's new position and the merge executes on arrival there.
-5. **Given** a merge is in progress, **When** a battle is triggered involving either company before the merge completes, **Then** the merge is cancelled and both companies are treated as independent for battle purposes.
-6. **Given** two friendly companies are co-located (same road point), **When** the player initiates a merge, **Then** the merge executes immediately without any march step — preserving the existing co-location merge behaviour.
-7. **Given** a proximity merge would produce a combined total exceeding the 50-soldier company cap, **When** the merge is initiated, **Then** the system handles overflow in the same way as the existing merge rules (primary company of 50 + overflow remainder company).
+4. **Given** a merge is in progress (initiator is marching to target), **When** the target company moves but the road distance between them remains within the proximity threshold, **Then** the initiating company updates its destination each tick and the merge executes on arrival.
+5. **Given** a merge is in progress, **When** the target company moves such that the road distance between the two exceeds the proximity threshold, **Then** the merge is automatically cancelled and both companies revert to independent status — the initiator stops at its current road position.
+6. **Given** a merge is in progress, **When** a battle is triggered involving either company before the merge completes, **Then** the merge is cancelled and both companies are treated as independent for battle purposes.
+7. **Given** two friendly companies are co-located (same road point), **When** the player initiates a merge, **Then** the merge executes immediately without any march step — preserving the existing co-location merge behaviour.
+8. **Given** a proximity merge would produce a combined total exceeding the 50-soldier company cap, **When** the merge is initiated, **Then** the system handles overflow in the same way as the existing merge rules (primary company of 50 + overflow remainder company).
 
 ---
 
 ### Edge Cases
 
 - What happens when a player taps very close to a junction but intends a mid-road point? The tap resolves to the nearest valid road point; if within a small snap radius of the junction, it snaps to the junction node.
-- What happens when two companies meet mid-road (neither at a named node)? The collision detection must handle mid-road positions; a battle trigger fires at the mid-road point as if it were a regular location.
+- What happens when two companies meet mid-road (neither at a named node)? The collision detection handles mid-road positions: a battle trigger fires at the mid-road point. If both companies are moving toward each other on the same segment, the battle is triggered at the midpoint of their positions even if they did not reach the same progress value within the tick.
+- What happens when two enemy companies are moving in the same direction on a segment and the faster one overtakes the slower? The faster company's progress passes the slower's progress within a tick — this is treated identically to a stationary-vs-moving collision; a battle is triggered at the overtaking position.
 - What happens when the map is saved and restored while a company is mid-road? The company's exact road-segment position (segment ID + fractional offset) is persisted and restored correctly on reload.
 - What happens when a road segment is very short and the tapped point is extremely close to one endpoint? The tap snaps to the endpoint node if the distance is within the snap threshold; otherwise the mid-road point is used.
 - What happens when a company at a mid-road position is split? Both resulting companies share the same road position and are immediately rendered at offset positions so both are tappable (see User Story 5).
 - What happens when the merge initiator is destroyed in battle before it reaches the merge target? The merge is cancelled; the target company remains independent at its road position.
+- What happens when the target company moves during a proximity merge and the distance grows beyond the threshold? The merge is automatically cancelled every tick the distance exceeds the threshold; both companies become independent — the initiator stops at its current road position.
 - What happens when the proximity threshold for merge spans two different road segments? The proximity is measured as road distance (not straight-line distance), so companies on different segments can be within threshold if the road path between them is short enough.
 - What happens when a player tries to proximity-merge with an enemy company by mistake? The merge option is only shown for friendly (same-owner) companies; the system must not offer a merge action against an enemy company.
 
@@ -134,22 +147,22 @@ The player does not need to march both companies to exactly the same road point 
 - **FR-003**: When the player taps a point that does not lie on any road segment, the tap MUST be ignored as a movement destination. No error message is required; the company retains its current orders.
 - **FR-004**: A company that arrives at a mid-road destination MUST stop at that exact road-segment position. It MUST NOT automatically continue to the next junction.
 - **FR-005**: A company stopped at a mid-road position MUST be selectable and orderable in the same way as a company stopped at a named node.
-- **FR-006**: The collision and battle-trigger rules MUST apply at mid-road positions. When an enemy company's path along a road segment reaches a position occupied by a stationary enemy company on the same segment, a battle MUST be triggered at that position.
+- **FR-006**: The collision and battle-trigger rules MUST apply at mid-road positions under two conditions: (a) a moving enemy company's progress along a segment reaches or passes a stationary enemy company's progress on the same segment within a tick; or (b) two enemy companies are on the same segment and moving toward each other such that their progress values would cross within that tick. In case (b) the battle is triggered at the midpoint of their two progress positions on that segment. Exact progress-value equality is NOT required to trigger a battle.
 - **FR-007**: The same-owner pass-through rule (from feature 002) MUST apply at mid-road positions: a friendly company marching along a segment MUST pass through a friendly company's mid-road position without stopping.
 - **FR-008**: Every castle node in any valid game map MUST be connected to at least one road edge. A map definition that includes a castle with no road connections MUST be rejected by the map builder with a validation error.
 - **FR-009**: A deployed company's initial position MUST be at the castle node from which it was deployed. Since castles are always on roads (FR-008), this guarantees the company starts at a valid road position.
-- **FR-010**: A company's mid-road position MUST be persistable and restorable — the segment identity and fractional position along that segment MUST survive a save/restore cycle with no drift.
+- **FR-010**: A company's mid-road position MUST be persistable and restorable. It is stored as a (named-node ID, fractional-progress, next-node ID) triple. This triple MUST survive a save/restore cycle with zero drift — the company reappears at exactly the same road position after reload.
 - **FR-011**: The visual representation of a mid-road position MUST be smooth and continuous: a company marker MUST be rendered at any fractional position along a road segment, not snapped to junction coordinates during transit.
 - **FR-012**: When multiple companies occupy the same mid-road position, the offset-rendering and tap-target rules (from feature 002, FR-001 through FR-003) MUST apply equally to mid-road positions as to named nodes.
 - **FR-013**: When a company is split at any road position (node or mid-road), the two resulting companies MUST be rendered at visually distinct offset positions so that each has its own individually reachable tap target. They MUST NOT overlap.
-- **FR-014**: The merge action MUST be available between two friendly companies whose road distance from each other is within a defined proximity threshold, even when they do not share the exact same road position.
+- **FR-014**: When a company is selected and the player taps a friendly company whose road distance from the selected company is within the proximity threshold (measured in map distance units, the same unit as `RoadEdge.length`), the system MUST present the merge-prompt dialog — the same dialog used for co-located companies — even though the two companies are not at the same road position. No additional UI affordance (button, menu, etc.) is required.
 - **FR-015**: When a proximity merge is initiated, the company that triggered the merge (the initiator) MUST automatically begin marching toward the target company's current road position. The merge MUST NOT execute until the initiator arrives at the target's position.
-- **FR-016**: If the target company moves while the initiator is marching toward it, the initiator MUST update its destination to follow the target's new position. The merge executes when the initiator reaches the target, wherever it currently is.
+- **FR-016**: While a proximity merge is in progress, the initiator MUST re-evaluate the target's road position every game tick and update its march destination to the target's current position. If at any tick the road distance (in map distance units) between the initiator and the target exceeds the proximity threshold, the merge MUST be automatically cancelled and both companies revert to independent status — no merge executes.
 - **FR-017**: If either company involved in a proximity merge is engaged in a battle before the merge completes, the merge MUST be cancelled and both companies revert to independent status. No merge action may execute while either participant is in a battle.
 
 ### Key Entities
 
-- **RoadPosition**: Represents any valid location on the road network — either a named node (castle or junction) or a point defined by a road segment reference plus a fractional offset [0.0, 1.0]. Replaces the current "currentNode + progress" model with a first-class position concept.
+- **RoadPosition**: Represents any valid location on the road network using the node-checkpoint model: a named node (castle or junction) plus a fractional progress value [0.0, 1.0) toward the next node along the current route. A fractional value of 0.0 means the company is exactly at the named node; any value > 0.0 and < 1.0 means the company is mid-segment. A mid-road stop is stored as progress < 1.0 on the final segment toward the destination. The company always snaps to a named node when passing through one, even if its final destination is mid-road. This extends (rather than replaces) the current `currentNode + progress` model by allowing the destination to be a mid-road fractional position rather than always a named node.
 - **RoadSegment**: The directed connection between two consecutive nodes (equivalent to the current `RoadEdge`), with a stable identifier used to anchor mid-road positions for persistence.
 - **MapNode (CastleNode)**: A castle node — must always have ≥ 1 road edge connected to it (enforced at map build time).
 - **GameMap**: The road network graph — must validate that all CastleNodes are road-connected at construction time.
@@ -170,10 +183,10 @@ The player does not need to march both companies to exactly the same road point 
 
 ## Assumptions
 
-- The current node-to-node movement model (`currentNode` + `progress`) is refactored to a first-class `RoadPosition` model that natively supports mid-road stops. The visual interpolation already present in `map_screen.dart` is the correct foundation for this.
+- The current node-to-node movement model (`currentNode` + `progress`) is extended rather than replaced. A mid-road stop is represented as a `(currentNode, progress < 1.0)` pair where `progress` is the fraction along the segment from `currentNode` toward the next node. The company always snaps to a named node when it arrives at one during transit (even if its destination is mid-road on a later segment); this keeps collision detection and persistence aligned with the existing tick-based architecture. The visual interpolation already present in `map_screen.dart` is the correct foundation for this.
 - Road segments are treated as straight lines between node coordinates for hit-testing purposes. Curved road rendering (if introduced later) would require a separate hit-test model.
 - The snap radius for resolving a tap to a junction node (rather than a mid-road point) is a UI constant chosen to avoid accidental mid-road stops when the player intends to tap a node; the exact value is a UX tuning parameter deferred to the planning phase.
 - The existing `RoadEdge` model is sufficient to represent a road segment; a stable `id` field will be added to enable persistence references.
 - Map fixture validation (castles on roads) applies to the current `GameMapFixture` and any future map definitions; it does not retroactively affect saved game states that predate this feature.
-- The proximity threshold for merge eligibility is measured as road distance (sum of remaining segment lengths along the shortest path), not straight-line Euclidean distance. The specific threshold value is a game-balance parameter deferred to the planning phase.
+- The proximity threshold for merge eligibility is measured as road distance (sum of remaining segment lengths along the shortest path) in **map distance units** — the same unit as `RoadEdge.length`. It is speed-independent and directly comparable to segment-length values in the model. The specific numeric value is a game-balance parameter deferred to the planning phase.
 - The offset rendering for co-located companies introduced in feature 002 is directly reused for mid-road positions; no new offset algorithm is required — only the position anchor changes from "node centre" to "road-segment fractional coordinate".
