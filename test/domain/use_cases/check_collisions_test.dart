@@ -6,6 +6,7 @@ import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -814,6 +815,235 @@ void main() {
             isTrue,
             reason:
                 'A 0-soldier garrison company must not trigger a castleAssault',
+          );
+        },
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // T019: mid-road segment collisions (Phase 4 — US2)
+    // -----------------------------------------------------------------------
+
+    group('T019: mid-road collisions', () {
+      // Helpers for mid-road companies on the player_castle → junction_mid segment
+      // (length 150.0). Both companies share currentNode=player_castle, nextNode=junction_mid.
+
+      CompanyOnMap _makeMidRoadCompany({
+        required String id,
+        required Ownership ownership,
+        required MapNode currentNode,
+        required String nextNodeId,
+        required double progress,
+        MapNode? destination,
+        RoadPosition? midRoadDestination,
+      }) {
+        return CompanyOnMap(
+          company: Company(composition: {UnitRole.warrior: 5}),
+          id: id,
+          ownership: ownership,
+          currentNode: currentNode,
+          destination: destination,
+          progress: progress,
+          midRoadDestination: midRoadDestination,
+        );
+      }
+
+      test(
+        'T019(a) head-on crossing: two enemies on same segment moving toward each '
+        'other → roadCollision trigger emitted with midRoadProgress at midpoint',
+        () {
+          // Player at progress 0.3 marching toward junction_mid (nextNode = junction_mid)
+          final player = _makeMidRoadCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.3,
+            destination: _junction, // marching toward junction
+          );
+          // AI at progress 0.7 on the REVERSE segment: junction_mid → player_castle,
+          // meaning it started at junction_mid and is progressing toward player_castle.
+          // Both are on the same road "corridor" but opposite directed edges.
+          // They are crossing (player goes 0.3→0.7 range, AI goes 0.7→0.3 on same corridor).
+          // We model this by placing both on the same canonical segment.
+          // Player is on player_castle→junction_mid at progress=0.3.
+          // AI is on junction_mid→player_castle at progress=0.3 (meaning 0.7 from playerCastle side).
+          final ai = _makeMidRoadCompany(
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+            nextNodeId: _playerCastle.id,
+            progress: 0.3, // 0.3 from junction_mid toward player_castle = 0.7 from player_castle
+            destination: _playerCastle,
+          );
+          final triggers = useCase.check(map: map, companies: [player, ai]);
+          // Look for the mid-road trigger specifically.
+          final midRoadTriggers = triggers
+              .where((t) =>
+                  t.kind == BattleTriggerKind.roadCollision &&
+                  t.midRoadProgress != null)
+              .toList();
+          expect(
+            midRoadTriggers,
+            isNotEmpty,
+            reason: 'Head-on enemies crossing on same segment must trigger mid-road roadCollision',
+          );
+          final trigger = midRoadTriggers.first;
+          expect(trigger.companyIds, containsAll(['p1', 'ai1']));
+          // midRoadProgress should be between 0 and 1
+          expect(trigger.midRoadProgress, greaterThan(0.0));
+          expect(trigger.midRoadProgress, lessThan(1.0));
+        },
+      );
+
+      test(
+        'T019(b) overtake: faster enemy passes slower enemy on same segment '
+        '→ roadCollision triggered at slower company\'s progress',
+        () {
+          // Both marching in the same direction: player_castle → junction_mid.
+          // Slow player at progress 0.4 (just a bit ahead).
+          // Fast AI starts at progress 0.6 (just caught up — already past slow).
+          // We simulate "overtake already happened" by having AI at > player progress.
+          final slowPlayer = _makeMidRoadCompany(
+            id: 'slow_p',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.4,
+            destination: _junction,
+          );
+          final fastAi = _makeMidRoadCompany(
+            id: 'fast_ai',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.4, // same position → overlap = trigger
+            destination: _junction,
+          );
+          final triggers = useCase.check(map: map, companies: [slowPlayer, fastAi]);
+          // Find the mid-road trigger specifically (progress > 0 companies may
+          // also appear in the node-level trigger).
+          final midRoadTriggers = triggers
+              .where((t) =>
+                  t.kind == BattleTriggerKind.roadCollision &&
+                  t.midRoadProgress != null)
+              .toList();
+          expect(
+            midRoadTriggers,
+            isNotEmpty,
+            reason: 'Enemies at same progress on same segment must trigger mid-road roadCollision',
+          );
+          final trigger = midRoadTriggers.first;
+          expect(trigger.companyIds, containsAll(['slow_p', 'fast_ai']));
+          expect(
+            trigger.midRoadProgress,
+            closeTo(0.4, 0.001),
+            reason: 'Overtake collision midRoadProgress must equal the overlap position',
+          );
+        },
+      );
+
+      test(
+        'T019(c) stationary mid-road hit: moving enemy reaches stationary '
+        'enemy\'s segment position → roadCollision at stationary progress',
+        () {
+          // Player company stopped at mid-road (no destination, midRoadDestination cleared,
+          // progress = 0.5 on player_castle → junction_mid).
+          final stationaryPlayer = _makeMidRoadCompany(
+            id: 'stat_p',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.5,
+            destination: null, // stationary mid-road
+          );
+          // AI marching along the same segment, currently at the same position.
+          final movingAi = _makeMidRoadCompany(
+            id: 'moving_ai',
+            ownership: Ownership.ai,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.5, // arrived at stationary player's position
+            destination: _junction,
+          );
+          final triggers = useCase.check(map: map, companies: [stationaryPlayer, movingAi]);
+          // Find the mid-road trigger specifically.
+          final midRoadTriggers = triggers
+              .where((t) =>
+                  t.kind == BattleTriggerKind.roadCollision &&
+                  t.midRoadProgress != null)
+              .toList();
+          expect(
+            midRoadTriggers,
+            isNotEmpty,
+            reason: 'Enemy reaching stationary mid-road company must trigger mid-road roadCollision',
+          );
+          final trigger = midRoadTriggers.first;
+          expect(trigger.companyIds, containsAll(['stat_p', 'moving_ai']));
+          expect(
+            trigger.midRoadProgress,
+            closeTo(0.5, 0.001),
+            reason: 'Stationary mid-road hit midRoadProgress must equal stationary progress',
+          );
+        },
+      );
+
+      test(
+        'T019(d) friendly pass-through: friendly companies on same segment '
+        '→ no roadCollision trigger',
+        () {
+          final friendly1 = _makeMidRoadCompany(
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.5,
+            destination: _junction,
+          );
+          final friendly2 = _makeMidRoadCompany(
+            id: 'p2',
+            ownership: Ownership.player,
+            currentNode: _playerCastle,
+            nextNodeId: _junction.id,
+            progress: 0.5,
+            destination: _junction,
+          );
+          final triggers = useCase.check(map: map, companies: [friendly1, friendly2]);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isFalse,
+            reason: 'Friendly companies on same segment must never trigger roadCollision',
+          );
+        },
+      );
+
+      test(
+        'T019(e) regression: existing node-collision tests still work — '
+        'two enemies at a node without mid-road positions trigger roadCollision',
+        () {
+          final player = _makeCompany(
+            id: 'p_node',
+            ownership: Ownership.player,
+            currentNode: _junction,
+          );
+          final ai = _makeCompany(
+            id: 'ai_node',
+            ownership: Ownership.ai,
+            currentNode: _junction,
+          );
+          final triggers = useCase.check(map: map, companies: [player, ai]);
+          expect(
+            triggers.any((t) => t.kind == BattleTriggerKind.roadCollision),
+            isTrue,
+            reason: 'Existing node-level road collision must still trigger',
+          );
+          // Node-level collision has no midRoadProgress.
+          final nodeTrigger = triggers
+              .firstWhere((t) => t.kind == BattleTriggerKind.roadCollision);
+          expect(
+            nodeTrigger.midRoadProgress,
+            isNull,
+            reason: 'Node collision must have null midRoadProgress',
           );
         },
       );

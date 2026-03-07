@@ -25,15 +25,22 @@ final class BattleTrigger {
   /// IDs of the Companies involved.
   final List<String> companyIds;
 
+  /// For mid-road collisions: the fractional progress along the canonical
+  /// segment (from the lower-id node toward the higher-id node) at which the
+  /// battle occurs. Null for node-level collisions.
+  final double? midRoadProgress;
+
   const BattleTrigger({
     required this.kind,
     required this.location,
     required this.companyIds,
+    this.midRoadProgress,
   });
 
   @override
   String toString() =>
-      'BattleTrigger(kind=$kind, location=${location.id}, companies=$companyIds)';
+      'BattleTrigger(kind=$kind, location=${location.id}, companies=$companyIds'
+      '${midRoadProgress != null ? ', midRoadProgress=$midRoadProgress' : ''})';
 }
 
 /// A [Company] positioned on the map with movement state.
@@ -266,6 +273,122 @@ final class CheckCollisions {
             companyIds: nodeGroup.map((c) => c.id).toList(),
           ),
         );
+      }
+    }
+
+    // FR-001 (mid-road): Opposing companies on the same road segment while in
+    // transit (progress > 0.0). Group by canonical segment key so both directed
+    // edges (A→B and B→A) are treated as the same physical corridor.
+    //
+    // Canonical key: lower node ID first → "${minId}__${maxId}".
+    // Within the group, each company's progress is normalised to the canonical
+    // direction (from-minId toward to-maxId):
+    //   - If company.currentNode.id == minId → canonical progress = company.progress
+    //   - If company.currentNode.id == maxId → canonical progress = 1.0 - company.progress
+    //
+    // Two enemy companies collide when their canonical progress values overlap
+    // (same position or crossing within the segment).
+    final bySegment = <String, List<CompanyOnMap>>{};
+    for (final co in freeCompanies) {
+      if (co.progress <= 0.0) continue; // at a node — handled by node loop above
+      final String? nextNodeId = co.destination?.id ??
+          co.midRoadDestination?.nextNodeId;
+
+      if (nextNodeId != null) {
+        // Moving or mid-road stopped with a known segment.
+        final fromId = co.currentNode.id;
+        final toId = nextNodeId;
+        final segKey = fromId.compareTo(toId) <= 0
+            ? '${fromId}__${toId}'
+            : '${toId}__${fromId}';
+        bySegment.putIfAbsent(segKey, () => []).add(co);
+      } else {
+        // Stationary mid-road company (progress > 0, no destination, no midRoadDestination).
+        // Add it to all segments departing from its currentNode so it can be
+        // detected by any enemy travelling those segments.
+        for (final edge in map.edges) {
+          if (edge.from.id != co.currentNode.id) continue;
+          final fromId = edge.from.id;
+          final toId = edge.to.id;
+          final segKey = fromId.compareTo(toId) <= 0
+              ? '${fromId}__${toId}'
+              : '${toId}__${fromId}';
+          bySegment.putIfAbsent(segKey, () => []).add(co);
+        }
+      }
+    }
+
+    for (final segEntry in bySegment.entries) {
+      final segKey = segEntry.key;
+      final segGroup = segEntry.value;
+      if (segGroup.length < 2) continue;
+
+      // Parse canonical node IDs from segKey.
+      final parts = segKey.split('__');
+      final canonMinId = parts[0];
+
+      // Normalise progress to canonical direction for each company.
+      double canonProgress(CompanyOnMap co) {
+        final fromId = co.currentNode.id;
+        return fromId == canonMinId ? co.progress : 1.0 - co.progress;
+      }
+
+      // Find the map node for the canonical "from" side (lower id) — used as
+      // the battle location for mid-road triggers.
+      final locationNode = map.nodes
+          .where((n) => n.id == canonMinId)
+          .cast<MapNode?>()
+          .firstOrNull;
+      if (locationNode == null) continue;
+
+      const double epsilon = 0.001;
+
+      for (int i = 0; i < segGroup.length; i++) {
+        for (int j = i + 1; j < segGroup.length; j++) {
+          final a = segGroup[i];
+          final b = segGroup[j];
+          if (!isEnemy(a.ownership, b.ownership)) continue;
+
+          final pA = canonProgress(a);
+          final pB = canonProgress(b);
+
+          // Same-direction: both from same currentNode → overlap when |pA - pB| < epsilon.
+          // Head-on: from different currentNodes → they collide when pA + pB >= 1.0 - epsilon.
+          final sameDirection = a.currentNode.id == b.currentNode.id;
+          final overlapping = (pA - pB).abs() < epsilon;
+          final crossing = !sameDirection && (pA + pB) >= 1.0 - epsilon;
+
+          if (!overlapping && !crossing) continue;
+
+          // Compute midRoadProgress:
+          // - Same-direction: use the raw progress average (in the companies' own
+          //   currentNode direction) so callers receive a progress value that is
+          //   directly comparable to the companies' own progress fields.
+          // - Head-on: use the canonical midpoint (both progressions are already
+          //   normalised to the same direction, so (pA + pB) / 2 is the canonical
+          //   meeting point, which is valid in [0, 1]).
+          final collisionProgress = sameDirection
+              ? (a.progress + b.progress) / 2.0
+              : ((pA + pB) / 2.0).clamp(0.0, 1.0);
+
+          // Skip if already emitted a mid-road trigger involving either company.
+          final alreadyEmitted = triggers.any(
+            (t) =>
+                t.kind == BattleTriggerKind.roadCollision &&
+                t.midRoadProgress != null &&
+                (t.companyIds.contains(a.id) || t.companyIds.contains(b.id)),
+          );
+          if (alreadyEmitted) continue;
+
+          triggers.add(
+            BattleTrigger(
+              kind: BattleTriggerKind.roadCollision,
+              location: locationNode,
+              companyIds: [a.id, b.id],
+              midRoadProgress: collisionProgress,
+            ),
+          );
+        }
       }
     }
 

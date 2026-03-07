@@ -67,6 +67,29 @@ const double _kNodeSnapPixels = 24.0;
 ///
 /// Companies at the same road node are sorted lexicographically by id so the
 /// slot order is deterministic across every render frame.
+/// Returns the slot-map key for [co].
+///
+/// For stationary mid-road companies (progress > 0, no destination, not in
+/// battle), a composite key is used so they are NOT grouped with companies
+/// truly at the same node but at a different canvas position.
+///
+/// Key format: `"${currentNode.id}__${nextNodeId}_${progress.toStringAsFixed(3)}"`
+/// where `nextNodeId` is resolved from `midRoadDestination?.nextNodeId ??
+/// destination?.id ?? currentNode.id`.
+String _slotKey(CompanyOnMap co) {
+  if (co.battleId != null ||
+      co.progress <= 0.0 ||
+      co.destination != null) {
+    // Node-level stationary (or in-battle at node): key by currentNode.id.
+    return co.currentNode.id;
+  }
+  // Mid-road stationary: use composite key.
+  final nextId = co.midRoadDestination?.nextNodeId ??
+      co.destination?.id ??
+      co.currentNode.id;
+  return '${co.currentNode.id}__${nextId}_${co.progress.toStringAsFixed(3)}';
+}
+
 ///
 /// This is called once per [_buildMap] frame and the result is passed to
 /// [_offsetForCompany] for each company, keeping slot assignment consistent
@@ -85,7 +108,7 @@ Map<String, List<String>> _buildSlotMap(
     // Castle-node companies all sit at the same centre position — they are
     // stacked on top of each other, so they must NOT be given spread offsets.
     if (co.currentNode is CastleNode) continue;
-    map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
+    map.putIfAbsent(_slotKey(co), () => []).add(co.id);
   }
   // Sort each node's list by id so order is stable across rebuilds.
   for (final entry in map.entries) {
@@ -111,7 +134,7 @@ Map<String, List<String>> _buildSlotMap(
       company.destination!.id != company.currentNode.id) {
     return (0.0, 0.0);
   }
-  final ids = slotMap[company.currentNode.id];
+  final ids = slotMap[_slotKey(company)];
   if (ids == null) return (0.0, 0.0);
   final slot = ids.indexOf(company.id);
   if (slot < 0) return (0.0, 0.0);
@@ -510,7 +533,47 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         .where((n) => n.id == ab.nodeId)
                         .firstOrNull;
                     if (node == null) return const SizedBox.shrink();
-                    final (cx, cy) = _nodeCanvasPos(node);
+
+                    final double cx;
+                    final double cy;
+
+                    // Mid-road battle: lerp battle indicator between the two
+                    // segment endpoint canvas positions at the stored progress.
+                    final mrp = ab.midRoadProgress;
+                    if (mrp != null) {
+                      // ab.nodeId is the canonical min-id node (segment start).
+                      // Find the other end of the segment by looking at
+                      // involved companies' currentNode / next-node.
+                      final involvedCompanies = matchState.companies
+                          .where((c) => c.battleId == ab.id)
+                          .toList();
+                      MapNode? otherNode;
+                      for (final co in involvedCompanies) {
+                        if (co.currentNode.id != ab.nodeId) {
+                          otherNode = co.currentNode;
+                          break;
+                        }
+                        final nextId = co.destination?.id ??
+                            co.midRoadDestination?.nextNodeId;
+                        if (nextId != null && nextId != ab.nodeId) {
+                          otherNode = matchState.match.map.nodes
+                              .where((n) => n.id == nextId)
+                              .firstOrNull;
+                          if (otherNode != null) break;
+                        }
+                      }
+                      if (otherNode != null) {
+                        final (x0, y0) = _nodeCanvasPos(node);
+                        final (x1, y1) = _nodeCanvasPos(otherNode);
+                        cx = x0 + (x1 - x0) * mrp;
+                        cy = y0 + (y1 - y0) * mrp;
+                      } else {
+                        (cx, cy) = _nodeCanvasPos(node);
+                      }
+                    } else {
+                      (cx, cy) = _nodeCanvasPos(node);
+                    }
+
                     return Positioned(
                       key: ValueKey('battle_indicator_${ab.id}'),
                       left: cx - 22,
@@ -1047,6 +1110,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (co.battleId != null) return _nodeCanvasPos(co.currentNode);
 
     final destination = co.destination;
+
+    // Stationary mid-road company: no destination but stopped at a fractional
+    // position along a segment (midRoadDestination was cleared on arrival,
+    // progress > 0 anchors it between currentNode and the segment's other end).
+    if (destination == null && co.progress > 0.0) {
+      // Prefer midRoadDestination's nextNodeId when available (the exact segment
+      // the company was heading toward when it stopped).
+      final midDest = co.midRoadDestination;
+      final String? nextNodeId = midDest?.nextNodeId ??
+          matchState.match.map.edges
+              .where((e) => e.from.id == co.currentNode.id)
+              .map((e) => e.to.id)
+              .firstOrNull;
+      if (nextNodeId != null) {
+        final nextNode = matchState.match.map.nodes
+            .where((n) => n.id == nextNodeId)
+            .firstOrNull;
+        if (nextNode != null) {
+          final (x0, y0) = _nodeCanvasPos(co.currentNode);
+          final (x1, y1) = _nodeCanvasPos(nextNode);
+          return (
+            x0 + (x1 - x0) * co.progress,
+            y0 + (y1 - y0) * co.progress,
+          );
+        }
+      }
+      return _nodeCanvasPos(co.currentNode);
+    }
+
     if (destination == null || destination.id == co.currentNode.id) {
       return _nodeCanvasPos(co.currentNode);
     }

@@ -342,5 +342,45 @@ void main() {
         );
       });
     });
+
+    // -------------------------------------------------------------------------
+    // T020 — mid-road ordering: setDestination clears midRoadDestination (US2)
+    // -------------------------------------------------------------------------
+    group('mid-road ordering', () {
+      test(
+        '(a) company with midRoadDestination set can receive new setDestination '
+        'to a named node — clears midRoadDestination and sets destination',
+        () {
+          // Company with an active midRoadDestination (stopped mid-road).
+          final midRoadPos = RoadPosition(
+            currentNodeId: _playerCastle.id,
+            progress: 0.5,
+            nextNodeId: _junction1.id,
+          );
+          final company = _makeCompany(
+            currentNode: _playerCastle,
+            progress: 0.5,
+          ).copyWith(midRoadDestination: midRoadPos);
+
+          // Issue a new destination to a named node.
+          final result = useCase.setDestination(
+            company: company,
+            destination: _aiCastle,
+            map: map,
+          );
+
+          expect(
+            result.destination?.id,
+            equals(_aiCastle.id),
+            reason: 'destination must be set to the named node',
+          );
+          expect(
+            result.midRoadDestination,
+            isNull,
+            reason: 'midRoadDestination must be cleared when a named destination is set',
+          );
+        },
+      );
+    });
   });
 }

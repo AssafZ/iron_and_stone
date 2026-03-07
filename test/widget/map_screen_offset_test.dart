@@ -39,6 +39,21 @@ CompanyOnMap _makeCompany({
       destination: destination,
     );
 
+/// Creates a mid-road stationary company: progress > 0, destination == null.
+CompanyOnMap _makeMidRoadStationary({
+  required String id,
+  required MapNode currentNode,
+  required double progress,
+  Ownership ownership = Ownership.player,
+}) =>
+    CompanyOnMap(
+      company: Company(composition: {UnitRole.warrior: 5}),
+      id: id,
+      ownership: ownership,
+      currentNode: currentNode,
+      progress: progress,
+    );
+
 // ---------------------------------------------------------------------------
 // Minimal widget that renders CompanyMarkers at Positioned slots derived
 // from a NodeOccupancy map — mirrors the intended map_screen.dart logic.
@@ -59,6 +74,17 @@ const _kSlotOffsets = [
   (_kSlotRadius, _kSlotRadius),    // slot 8
 ];
 
+/// Mirrors _slotKey from map_screen.dart.
+String _slotKey(CompanyOnMap co) {
+  if (co.battleId != null || co.progress <= 0.0 || co.destination != null) {
+    return co.currentNode.id;
+  }
+  final nextId = co.midRoadDestination?.nextNodeId ??
+      co.destination?.id ??
+      co.currentNode.id;
+  return '${co.currentNode.id}__${nextId}_${co.progress.toStringAsFixed(3)}';
+}
+
 /// Mirrors _buildSlotMap from map_screen.dart: builds a node-id → sorted
 /// company-id list from [companies], stationary only.
 Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
@@ -67,7 +93,7 @@ Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
     final isStationary = co.destination == null ||
         co.destination!.id == co.currentNode.id;
     if (!isStationary) continue;
-    map.putIfAbsent(co.currentNode.id, () => []).add(co.id);
+    map.putIfAbsent(_slotKey(co), () => []).add(co.id);
   }
   for (final ids in map.values) {
     ids.sort();
@@ -83,7 +109,7 @@ Map<String, List<String>> _buildSlotMap(List<CompanyOnMap> companies) {
   if (co.destination != null && co.destination!.id != co.currentNode.id) {
     return (0.0, 0.0);
   }
-  final ids = slotMap[co.currentNode.id];
+  final ids = slotMap[_slotKey(co)];
   if (ids == null) return (0.0, 0.0);
   final slot = ids.indexOf(co.id);
   if (slot < 0) return (0.0, 0.0);
@@ -346,6 +372,78 @@ void main() {
         reason: 'Stationary company must not have reduced opacity',
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // T023 (Phase 4): mid-road stationary companies use composite slot key
+  // -------------------------------------------------------------------------
+
+  group('T023 — mid-road stationary companies use composite slot key', () {
+    test(
+      '(a) two mid-road companies at same (currentNode, progress=0.5) receive '
+      'different offsets from _buildSlotMap',
+      () {
+        final coA = _makeMidRoadStationary(
+          id: 'co_a',
+          currentNode: _junction,
+          progress: 0.5,
+        );
+        final coB = _makeMidRoadStationary(
+          id: 'co_b',
+          currentNode: _junction,
+          progress: 0.5,
+          ownership: Ownership.ai,
+        );
+
+        final slotMap = _buildSlotMap([coA, coB]);
+        final offA = _offsetForCompany(coA, slotMap);
+        final offB = _offsetForCompany(coB, slotMap);
+
+        expect(
+          offA == offB,
+          isFalse,
+          reason:
+              'Two mid-road companies at the same canvas position must have '
+              'distinct offsets so their markers do not overlap',
+        );
+      },
+    );
+
+    test(
+      '(b) a node-stationary company and a mid-road company at the same '
+      'currentNode are NOT in the same slot group — mid-road company gets (0,0)',
+      () {
+        // Node-stationary: progress=0, destination=null.
+        final coNode = _makeCompany(id: 'co_node', currentNode: _junction);
+        // Mid-road stationary: progress=0.5, destination=null.
+        final coMidRoad = _makeMidRoadStationary(
+          id: 'co_midroad',
+          currentNode: _junction,
+          progress: 0.5,
+        );
+
+        final slotMap = _buildSlotMap([coNode, coMidRoad]);
+        final offNode = _offsetForCompany(coNode, slotMap);
+        final offMidRoad = _offsetForCompany(coMidRoad, slotMap);
+
+        // The node company should be in the node group → slot 0 → (0,0).
+        expect(
+          offNode,
+          equals((0.0, 0.0)),
+          reason: 'Node-stationary company must be at slot 0 in its own group',
+        );
+        // The mid-road company is at a different canvas position → its own
+        // group → slot 0 → (0,0). Crucially it must NOT be in the node group
+        // (which would push it to slot 1 = (28,0)).
+        expect(
+          offMidRoad,
+          equals((0.0, 0.0)),
+          reason:
+              'Mid-road company must not be in the same slot group as a '
+              'node-stationary company sharing the same currentNode',
+        );
+      },
+    );
   });
 
   // -------------------------------------------------------------------------

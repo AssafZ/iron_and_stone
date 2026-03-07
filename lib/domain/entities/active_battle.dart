@@ -31,12 +31,18 @@ final class ActiveBattle {
   /// The live [Battle] carrying round state (HP maps, round log, outcome).
   final Battle battle;
 
+  /// For mid-road battles: fractional progress along the canonical segment
+  /// (from the lower-id node toward the higher-id node) where the battle is
+  /// occurring. Null for node-level battles.
+  final double? midRoadProgress;
+
   ActiveBattle({
     required this.nodeId,
     required List<String> attackerCompanyIds,
     required List<String> defenderCompanyIds,
     required this.attackerOwnership,
     required this.battle,
+    this.midRoadProgress,
   })  : id = 'battle_$nodeId',
         attackerCompanyIds = List.unmodifiable(attackerCompanyIds),
         defenderCompanyIds = List.unmodifiable(defenderCompanyIds);
@@ -50,6 +56,7 @@ final class ActiveBattle {
     List<String>? defenderCompanyIds,
     Ownership? attackerOwnership,
     Battle? battle,
+    double? midRoadProgress,
   }) {
     return ActiveBattle(
       nodeId: nodeId ?? this.nodeId,
@@ -57,6 +64,7 @@ final class ActiveBattle {
       defenderCompanyIds: defenderCompanyIds ?? this.defenderCompanyIds,
       attackerOwnership: attackerOwnership ?? this.attackerOwnership,
       battle: battle ?? this.battle,
+      midRoadProgress: midRoadProgress ?? this.midRoadProgress,
     );
   }
 

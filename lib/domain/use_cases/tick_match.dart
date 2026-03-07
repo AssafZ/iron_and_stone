@@ -259,6 +259,7 @@ final class TickMatch {
         attackerCompanyIds: attackerIds,
         defenderCompanyIds: defenderIds,
         attackerOwnership: attackerOwnership,
+        midRoadProgress: trigger.midRoadProgress,
         battle: Battle(
           attackers: attackerCompanies,
           defenders: defenderCompanies,

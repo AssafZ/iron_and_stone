@@ -38,6 +38,8 @@ final class MoveCompany {
   /// Assign [destination] to [company].
   ///
   /// Throws [MoveCompanyException] if no road path exists to [destination].
+  /// Clears any active [CompanyOnMap.midRoadDestination] (a named-node order
+  /// supersedes a fractional mid-road stop).
   CompanyOnMap setDestination({
     required CompanyOnMap company,
     required MapNode destination,
@@ -45,7 +47,7 @@ final class MoveCompany {
   }) {
     // Same node: valid (no-op movement).
     if (destination.id == company.currentNode.id) {
-      return company.copyWith(destination: destination);
+      return company.copyWith(destination: destination, midRoadDestination: null);
     }
 
     if (!MovementRules.isValidPath(map, company.currentNode, destination)) {
@@ -54,7 +56,7 @@ final class MoveCompany {
       );
     }
 
-    return company.copyWith(destination: destination);
+    return company.copyWith(destination: destination, midRoadDestination: null);
   }
 
   /// Assign a mid-road fractional stop position to [company].
