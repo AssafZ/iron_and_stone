@@ -11,7 +11,14 @@ final class RoadEdge {
   /// Length of this road segment in map distance units.
   final double length;
 
-  RoadEdge({required this.from, required this.to, required this.length}) {
+  /// Stable string identifier derived as `"${from.id}__${to.id}"`.
+  ///
+  /// Computed in the constructor — not a required parameter.
+  /// Used for persistence (drift column) and segment-keying in collision detection.
+  final String id;
+
+  RoadEdge({required this.from, required this.to, required this.length})
+      : id = '${from.id}__${to.id}' {
     if (from.id == to.id) {
       throw ArgumentError(
         'A RoadEdge cannot be a self-loop: from.id == to.id == "${from.id}".',

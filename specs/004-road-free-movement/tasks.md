@@ -36,26 +36,26 @@
 
 ### 2A — `RoadPosition` value object (blocks US1–US6)
 
-- [ ] T004 Write failing unit tests for `RoadPosition` value object in `test/domain/value_objects/road_position_test.dart` — cover: valid progress `[0.0, 1.0)` (any `double < 1.0` is accepted, e.g. `0.9999` must pass), `progress = 1.0` throws `ArgumentError`, `progress < 0.0` throws `ArgumentError`, `currentNodeId == nextNodeId` throws `ArgumentError`
-- [ ] T005 Create `lib/domain/value_objects/road_position.dart` — implement `final class RoadPosition` with fields `currentNodeId`, `progress`, `nextNodeId`; constructor validates `progress >= 1.0 || progress < 0.0` throws `ArgumentError` (half-open range `[0.0, 1.0)`) and `currentNodeId != nextNodeId`; implement `==` and `hashCode`; confirm T004 tests pass
+- [X] T004 Write failing unit tests for `RoadPosition` value object in `test/domain/value_objects/road_position_test.dart` — cover: valid progress `[0.0, 1.0)` (any `double < 1.0` is accepted, e.g. `0.9999` must pass), `progress = 1.0` throws `ArgumentError`, `progress < 0.0` throws `ArgumentError`, `currentNodeId == nextNodeId` throws `ArgumentError`
+- [X] T005 Create `lib/domain/value_objects/road_position.dart` — implement `final class RoadPosition` with fields `currentNodeId`, `progress`, `nextNodeId`; constructor validates `progress >= 1.0 || progress < 0.0` throws `ArgumentError` (half-open range `[0.0, 1.0)`) and `currentNodeId != nextNodeId`; implement `==` and `hashCode`; confirm T004 tests pass
 
 ### 2B — `RoadEdge.id` stable identifier (blocks US1, US3, persistence)
 
-- [ ] T006 Write failing unit test in `test/domain/entities/road_edge_test.dart` — assert that a `RoadEdge(from: nodeA, to: nodeB, length: 100)` has `id == "nodeA_id__nodeB_id"`; assert reverse edge has `id == "nodeB_id__nodeA_id"`
-- [ ] T007 Modify `lib/domain/entities/road_edge.dart` — add `final String id;` derived as `"${from.id}__${to.id}"` in the constructor body (computed, not a required parameter); confirm T006 passes and all existing tests still compile
+- [X] T006 Write failing unit test in `test/domain/entities/road_edge_test.dart` — assert that a `RoadEdge(from: nodeA, to: nodeB, length: 100)` has `id == "nodeA_id__nodeB_id"`; assert reverse edge has `id == "nodeB_id__nodeA_id"`
+- [X] T007 Modify `lib/domain/entities/road_edge.dart` — add `final String id;` derived as `"${from.id}__${to.id}"` in the constructor body (computed, not a required parameter); confirm T006 passes and all existing tests still compile
 
 ### 2C — `CompanyOnMap` extended fields (blocks US1, US2, US5, US6)
 
-- [ ] T008 Modify `lib/domain/use_cases/check_collisions.dart` — add two nullable fields to `CompanyOnMap`: `midRoadDestination: RoadPosition?` and `proximityMergeIntent: ProximityMergeIntent?`; update `copyWith` to handle both with sentinel pattern; confirm all existing tests compile and pass (fields default to `null`)
+- [X] T008 Modify `lib/domain/use_cases/check_collisions.dart` — add two nullable fields to `CompanyOnMap`: `midRoadDestination: RoadPosition?` and `proximityMergeIntent: ProximityMergeIntent?`; update `copyWith` to handle both with sentinel pattern; confirm all existing tests compile and pass (fields default to `null`)
 
 ### 2D — `ProximityMergeIntent` entity (blocks US6)
 
-- [ ] T009 [P] Create `lib/domain/entities/proximity_merge_intent.dart` — implement `final class ProximityMergeIntent` with `final String targetCompanyId`; constructor throws `ArgumentError` if `targetCompanyId` is empty
+- [X] T009 [P] Create `lib/domain/entities/proximity_merge_intent.dart` — implement `final class ProximityMergeIntent` with `final String targetCompanyId`; constructor throws `ArgumentError` if `targetCompanyId` is empty
 
 ### 2E — `GameMap` castle validation + `roadDistance` (blocks US3, US6)
 
-- [ ] T010 Write failing unit tests in `test/domain/entities/game_map_test.dart` — cover: (a) map with all castles connected builds without error; (b) map with castle having no edges throws `ArgumentError` naming the offending castle; (c) `GameMapFixture.build()` succeeds (regression guard); (d) `roadDistance` same-segment case: progress 0.2→0.7 on a length-100 edge = 50.0; (e) `roadDistance` cross-segment uses shortest BFS path
-- [ ] T011 Modify `lib/domain/entities/game_map.dart` — add constructor validation loop over `CastleNode` entries: assert each has ≥ 1 matching edge; add `roadDistance(RoadPosition from, RoadPosition to) → double` method (same-segment: `|to.progress - from.progress| * edge.length`; cross-segment: distance from `from` to `from.currentNodeId`'s nextNode + BFS + distance to `to`); confirm T010 passes
+- [X] T010 Write failing unit tests in `test/domain/entities/game_map_test.dart` — cover: (a) map with all castles connected builds without error; (b) map with castle having no edges throws `ArgumentError` naming the offending castle; (c) `GameMapFixture.build()` succeeds (regression guard); (d) `roadDistance` same-segment case: progress 0.2→0.7 on a length-100 edge = 50.0; (e) `roadDistance` cross-segment uses shortest BFS path
+- [X] T011 Modify `lib/domain/entities/game_map.dart` — add constructor validation loop over `CastleNode` entries: assert each has ≥ 1 matching edge; add `roadDistance(RoadPosition from, RoadPosition to) → double` method (same-segment: `|to.progress - from.progress| * edge.length`; cross-segment: distance from `from` to `from.currentNodeId`'s nextNode + BFS + distance to `to`); confirm T010 passes
 
 **Checkpoint**: Foundational types exist, all tests green → user story phases can now begin
 

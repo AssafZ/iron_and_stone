@@ -1,8 +1,10 @@
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
+import 'package:iron_and_stone/domain/entities/proximity_merge_intent.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 /// The kind of battle trigger detected.
 enum BattleTriggerKind {
@@ -64,6 +66,13 @@ final class CompanyOnMap {
   /// when the Company is not in battle.
   final String? battleId;
 
+  /// Mid-road destination this company is marching toward, or null when the
+  /// company is heading to a named node or is stationary.
+  final RoadPosition? midRoadDestination;
+
+  /// Active proximity-merge intent, or null when no merge is in progress.
+  final ProximityMergeIntent? proximityMergeIntent;
+
   const CompanyOnMap({
     required this.company,
     required this.id,
@@ -73,6 +82,8 @@ final class CompanyOnMap {
     this.progress = 0.0,
     this.growthRemainder = const {},
     this.battleId,
+    this.midRoadDestination,
+    this.proximityMergeIntent,
   });
 
   /// Sentinel used to distinguish "caller passed null explicitly" from
@@ -83,6 +94,12 @@ final class CompanyOnMap {
   /// "caller did not pass the argument at all" for the nullable [battleId].
   static const Object _battleIdSentinel = Object();
 
+  /// Sentinel for [midRoadDestination].
+  static const Object _midRoadDestinationSentinel = Object();
+
+  /// Sentinel for [proximityMergeIntent].
+  static const Object _proximityMergeIntentSentinel = Object();
+
   CompanyOnMap copyWith({
     Company? company,
     String? id,
@@ -92,6 +109,8 @@ final class CompanyOnMap {
     double? progress,
     Map<UnitRole, double>? growthRemainder,
     Object? battleId = _battleIdSentinel,
+    Object? midRoadDestination = _midRoadDestinationSentinel,
+    Object? proximityMergeIntent = _proximityMergeIntentSentinel,
   }) {
     return CompanyOnMap(
       company: company ?? this.company,
@@ -106,6 +125,12 @@ final class CompanyOnMap {
       battleId: identical(battleId, _battleIdSentinel)
           ? this.battleId
           : battleId as String?,
+      midRoadDestination: identical(midRoadDestination, _midRoadDestinationSentinel)
+          ? this.midRoadDestination
+          : midRoadDestination as RoadPosition?,
+      proximityMergeIntent: identical(proximityMergeIntent, _proximityMergeIntentSentinel)
+          ? this.proximityMergeIntent
+          : proximityMergeIntent as ProximityMergeIntent?,
     );
   }
 

@@ -61,5 +61,22 @@ void main() {
         expect(edge.from.id, isNot(equals(edge.to.id)));
       });
     });
+
+    group('id — stable identifier (T006)', () {
+      test('id is from.id__to.id', () {
+        final edge = RoadEdge(from: nodeA, to: nodeB, length: 100.0);
+        expect(edge.id, equals('a__b'));
+      });
+
+      test('reverse edge has id nodeB.id__nodeA.id', () {
+        final edge = RoadEdge(from: nodeB, to: nodeA, length: 100.0);
+        expect(edge.id, equals('b__a'));
+      });
+
+      test('id is computed from node ids, not node objects', () {
+        final edgeAC = RoadEdge(from: nodeA, to: nodeC, length: 200.0);
+        expect(edgeAC.id, equals('a__c'));
+      });
+    });
   });
 }
