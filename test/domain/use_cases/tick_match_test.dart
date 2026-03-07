@@ -9,10 +9,12 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/entities/proximity_merge_intent.dart';
 import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/tick_match.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2341,8 +2343,316 @@ void main() {
         },
       );
     });
-  });
-}
+
+    // -------------------------------------------------------------------------
+    // T034 [US6]: ProximityMergeIntent lifecycle
+    // -------------------------------------------------------------------------
+    // Tests for proximity merge: when two friendly companies have a
+    // ProximityMergeIntent set, the tick resolves merges, cancellations, etc.
+    // -------------------------------------------------------------------------
+    group('T034 [US6]: proximity merge lifecycle', () {
+      // Map: pc —100— j1 —100— j2
+      // All edges bidirectional.
+      late GameMap _proximityMap;
+      late CastleNode _pc;
+      late RoadJunctionNode _j1;
+      late RoadJunctionNode _j2;
+      late Match _proximityMatch;
+      late List<Castle> _proximityCastles;
+
+      setUp(() {
+        _pc = const CastleNode(
+          id: 'pc',
+          x: 0.0,
+          y: 0.0,
+          ownership: Ownership.player,
+        );
+        _j1 = const RoadJunctionNode(id: 'j1', x: 100.0, y: 0.0);
+        _j2 = const RoadJunctionNode(id: 'j2', x: 200.0, y: 0.0);
+        _proximityMap = GameMap(
+          nodes: [_pc, _j1, _j2],
+          edges: [
+            RoadEdge(from: _pc, to: _j1, length: 100.0),
+            RoadEdge(from: _j1, to: _pc, length: 100.0),
+            RoadEdge(from: _j1, to: _j2, length: 100.0),
+            RoadEdge(from: _j2, to: _j1, length: 100.0),
+          ],
+        );
+        _proximityMatch = Match(
+          map: _proximityMap,
+          humanPlayer: Ownership.player,
+          phase: MatchPhase.playing,
+        );
+        _proximityCastles = [
+          Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+        ];
+      });
+
+      // (a) initiator arrives at target position → MergeCompanies fires,
+      //     initiator removed, single merged company remains.
+      test(
+        '(a) initiator already at same mid-road position as target → '
+        'immediate merge, initiator removed',
+        () {
+          // Both companies are at the same mid-road position: j1 at progress=0.2
+          // on segment j1→j2. The tick should resolve the merge immediately.
+          final target = CompanyOnMap(
+            id: 'target',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.2,
+            company: Company(composition: {UnitRole.warrior: 5}),
+          );
+          // Initiator has a ProximityMergeIntent pointing to target and is
+          // already co-located (same node + same progress = 0 road distance).
+          final initiator = CompanyOnMap(
+            id: 'initiator',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.2,
+            company: Company(composition: {UnitRole.warrior: 3}),
+            proximityMergeIntent: ProximityMergeIntent(targetCompanyId: 'target'),
+          );
+
+          final result = const TickMatch().tick(
+            match: _proximityMatch,
+            castles: _proximityCastles,
+            companies: [initiator, target],
+            activeBattles: const [],
+          );
+
+          // After the merge there should be exactly 1 company (initiator merged into target).
+          expect(
+            result.companies.length,
+            equals(1),
+            reason: 'Co-located proximity merge must produce exactly 1 company',
+          );
+          // The surviving company must have 8 soldiers (5 + 3).
+          expect(
+            result.companies.first.company.totalSoldiers.value,
+            equals(8),
+            reason: 'Merged company must have combined soldier count',
+          );
+          // The intent must be cleared.
+          expect(
+            result.companies.first.proximityMergeIntent,
+            isNull,
+            reason: 'Merged company must not carry a ProximityMergeIntent',
+          );
+        },
+      );
+
+      // (b) initiator marches toward target's position — after enough ticks
+      //     the initiator arrives and merge fires.
+      test(
+        '(b) initiator marches toward target and merges on arrival',
+        () {
+          // Target is on the j1→j2 segment at progress=0.15 (15 units in from j1).
+          // Initiator is at j1 (progress=0.0).
+          // Distance = 15 units ≤ threshold(30) → merge is not cancelled.
+          // After a tick the initiator will reach progress≥0.15 and merge fires.
+          // Neither company is at a castle, so no reinforcement.
+          final target = CompanyOnMap(
+            id: 'target',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.15,
+            midRoadDestination: RoadPosition(
+              currentNodeId: 'j1',
+              nextNodeId: 'j2',
+              progress: 0.15,
+            ),
+            company: Company(composition: {UnitRole.warrior: 5}),
+          );
+          final initiator = CompanyOnMap(
+            id: 'initiator',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.0,
+            company: Company(composition: {UnitRole.warrior: 3}),
+            proximityMergeIntent: ProximityMergeIntent(targetCompanyId: 'target'),
+          );
+
+          var castles = _proximityCastles;
+          var companies = [initiator, target];
+          // Warriors move at 3 units/sec × 10 sec/tick = 30 units/tick on a
+          // 100-length edge → progress advances by 0.30/tick.
+          // 15 units = 0.15 progress → reached after 1 tick.
+          for (int i = 0; i < 5; i++) {
+            final result = const TickMatch().tick(
+              match: _proximityMatch,
+              castles: castles,
+              companies: companies,
+              activeBattles: const [],
+            );
+            castles = result.castles;
+            companies = result.companies;
+            if (companies.length == 1) break;
+          }
+
+          expect(
+            companies.length,
+            equals(1),
+            reason: 'Initiator must march to target and merge within 5 ticks',
+          );
+          expect(
+            companies.first.company.totalSoldiers.value,
+            equals(8),
+            reason: 'Merged company must have 5 + 3 = 8 soldiers',
+          );
+        },
+      );
+
+      // (c) road distance exceeds threshold → merge cancelled, both independent.
+      test(
+        '(c) distance > threshold → merge cancelled, both companies independent',
+        () {
+          // Target is placed far away: j2 at progress=0.0 (200 units from pc).
+          // Initiator is at pc with intent toward target.
+          // Distance = ~200 units >> kProximityMergeThreshold (30).
+          final target = CompanyOnMap(
+            id: 'target',
+            ownership: Ownership.player,
+            currentNode: _j2,
+            progress: 0.0,
+            company: Company(composition: {UnitRole.warrior: 5}),
+          );
+          final initiator = CompanyOnMap(
+            id: 'initiator',
+            ownership: Ownership.player,
+            currentNode: _pc,
+            progress: 0.0,
+            company: Company(composition: {UnitRole.warrior: 3}),
+            proximityMergeIntent: ProximityMergeIntent(targetCompanyId: 'target'),
+          );
+
+          final result = const TickMatch().tick(
+            match: _proximityMatch,
+            castles: _proximityCastles,
+            companies: [initiator, target],
+            activeBattles: const [],
+          );
+
+          // Merge must be cancelled: both companies still present.
+          expect(
+            result.companies.length,
+            equals(2),
+            reason: 'Merge must be cancelled when distance > threshold',
+          );
+          // Initiator must have no proximityMergeIntent.
+          final updatedInitiator = result.companies
+              .firstWhereOrNull((c) => c.id == 'initiator');
+          expect(updatedInitiator, isNotNull);
+          expect(
+            updatedInitiator!.proximityMergeIntent,
+            isNull,
+            reason: 'ProximityMergeIntent must be cleared on cancellation',
+          );
+        },
+      );
+
+      // (d) either company enters battle → merge cancelled.
+      test(
+        '(d) initiator enters battle → merge cancelled',
+        () {
+          // Both companies on the same segment; initiator has intent toward target.
+          // We give the initiator a battleId to simulate battle.
+          final target = CompanyOnMap(
+            id: 'target',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.2,
+            company: Company(composition: {UnitRole.warrior: 5}),
+          );
+          final initiator = CompanyOnMap(
+            id: 'initiator',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.3,
+            battleId: 'some_battle',
+            company: Company(composition: {UnitRole.warrior: 3}),
+            proximityMergeIntent: ProximityMergeIntent(targetCompanyId: 'target'),
+          );
+          // Dummy enemy company to satisfy Battle preconditions.
+          final enemy = CompanyOnMap(
+            id: 'enemy',
+            ownership: Ownership.ai,
+            currentNode: _j1,
+            progress: 0.3,
+            battleId: 'some_battle',
+            company: Company(composition: {UnitRole.warrior: 4}),
+          );
+
+          // Provide a fake ActiveBattle so the tick doesn't remove it.
+          final fakeBattle = ActiveBattle(
+            nodeId: 'j1',
+            attackerCompanyIds: ['initiator'],
+            defenderCompanyIds: ['enemy'],
+            attackerOwnership: Ownership.player,
+            battle: Battle(
+              attackers: [initiator.company],
+              defenders: [enemy.company],
+              kind: BattleKind.roadCollision,
+              initialAttackers: [initiator.company],
+              initialDefenders: [enemy.company],
+            ),
+          );
+
+          final result = const TickMatch().tick(
+            match: _proximityMatch,
+            castles: _proximityCastles,
+            companies: [initiator, target, enemy],
+            activeBattles: [fakeBattle],
+          );
+
+          // The initiator must not carry a ProximityMergeIntent after the tick.
+          final updatedInitiator = result.companies
+              .firstWhereOrNull((c) => c.id == 'initiator');
+          expect(updatedInitiator, isNotNull,
+              reason: 'Initiator must still exist (battle not resolved yet)');
+          expect(
+            updatedInitiator?.proximityMergeIntent,
+            isNull,
+            reason: 'ProximityMergeIntent must be cleared when initiator is in battle',
+          );
+        },
+      );
+
+      // (e) target company no longer exists → merge cancelled.
+      test(
+        '(e) target company does not exist → merge cancelled immediately',
+        () {
+          // Initiator has an intent pointing to a non-existent target.
+          final initiator = CompanyOnMap(
+            id: 'initiator',
+            ownership: Ownership.player,
+            currentNode: _j1,
+            progress: 0.0,
+            company: Company(composition: {UnitRole.warrior: 3}),
+            proximityMergeIntent:
+                ProximityMergeIntent(targetCompanyId: 'ghost_target'),
+          );
+
+          final result = const TickMatch().tick(
+            match: _proximityMatch,
+            castles: _proximityCastles,
+            companies: [initiator],
+            activeBattles: const [],
+          );
+
+          final updatedInitiator = result.companies
+              .firstWhereOrNull((c) => c.id == 'initiator');
+          expect(updatedInitiator, isNotNull);
+          expect(
+            updatedInitiator!.proximityMergeIntent,
+            isNull,
+            reason: 'ProximityMergeIntent must be cleared when target is gone',
+          );
+        },
+      );
+    });
+  }); // group('TickMatch')
+} // main()
 
 // ignore: avoid_classes_with_only_static_members
 extension _IterableExt<T> on Iterable<T> {

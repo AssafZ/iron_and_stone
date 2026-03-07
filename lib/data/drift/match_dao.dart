@@ -11,6 +11,7 @@ import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 import 'package:iron_and_stone/state/match_notifier.dart' show MatchState;
 
 // ---------------------------------------------------------------------------
@@ -256,6 +257,12 @@ class MatchDao {
               compositionJson:
                   Value(_encodeGarrison(co.company.composition)),
               battleId: Value(co.battleId ?? ''),
+              midRoadCurrentNodeId:
+                  Value(co.midRoadDestination?.currentNodeId ?? ''),
+              midRoadNextNodeId:
+                  Value(co.midRoadDestination?.nextNodeId ?? ''),
+              midRoadProgress:
+                  Value(co.midRoadDestination?.progress ?? 0.0),
             ));
       }
 
@@ -333,6 +340,17 @@ class MatchDao {
       // Empty string in DB → null battleId on the domain entity.
       final battleId = row.battleId.isNotEmpty ? row.battleId : null;
 
+      // Restore midRoadDestination if all three columns are populated.
+      RoadPosition? midRoadDestination;
+      if (row.midRoadCurrentNodeId.isNotEmpty &&
+          row.midRoadNextNodeId.isNotEmpty) {
+        midRoadDestination = RoadPosition(
+          currentNodeId: row.midRoadCurrentNodeId,
+          nextNodeId: row.midRoadNextNodeId,
+          progress: row.midRoadProgress,
+        );
+      }
+
       companies.add(CompanyOnMap(
         id: row.id,
         ownership: _ownershipFromString(row.ownership),
@@ -341,6 +359,7 @@ class MatchDao {
         progress: row.progress,
         company: Company(composition: composition),
         battleId: battleId,
+        midRoadDestination: midRoadDestination,
       ));
     }
 

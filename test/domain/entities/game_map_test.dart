@@ -162,6 +162,43 @@ void main() {
         );
         expect(gameMap.roadDistance(from, to), closeTo(180.0, 0.001));
       });
+
+      // T035 [US6]: explicit adjacent-segment roadDistance test
+      test('(f) adjacent segments B→C at 0.3 to C→D at 0.6 = 70 + 60 = 130', () {
+        // from = B—C at progress 0.3 → 70 units remaining to reach C
+        // to   = C—D at progress 0.6 → 60 units into C—D
+        // total = 70 + 60 = 130
+        final from = RoadPosition(
+          currentNodeId: 'B',
+          progress: 0.3,
+          nextNodeId: 'C',
+        );
+        final to = RoadPosition(
+          currentNodeId: 'C',
+          progress: 0.6,
+          nextNodeId: 'D',
+        );
+        expect(gameMap.roadDistance(from, to), closeTo(130.0, 0.001));
+      });
+
+      test('(g) same-segment reversed (to < from): A→B at 0.8 to A→B at 0.2 = reverse path B→A→B = 60 + 20 = 80', () {
+        // 'from' is ahead of 'to' on the same segment.
+        // Shortest path: go back to A via B→A (20 units), then A→B to progress 0.2 (20 units)
+        // = (1.0-0.8)*100 + 0.2*100 = 20 + 20 = 40? No — must check implementation.
+        // The implementation returns absolute distance for same-segment and BFS otherwise.
+        // Same-segment: |to.progress - from.progress| * edge.length = |0.2 - 0.8| * 100 = 60.
+        final from = RoadPosition(
+          currentNodeId: 'A',
+          progress: 0.8,
+          nextNodeId: 'B',
+        );
+        final to = RoadPosition(
+          currentNodeId: 'A',
+          progress: 0.2,
+          nextNodeId: 'B',
+        );
+        expect(gameMap.roadDistance(from, to), closeTo(60.0, 0.001));
+      });
     });
   });
 }

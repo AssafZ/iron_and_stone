@@ -31,6 +31,26 @@ class CompaniesTable extends Table {
   TextColumn get battleId =>
       text().withDefault(const Constant(''))();
 
+  // ---------------------------------------------------------------------------
+  // Mid-road destination columns (T040 — Phase 9)
+  // ---------------------------------------------------------------------------
+
+  /// The current-node ID for the company's [midRoadDestination], or empty
+  /// string when there is no mid-road stop.
+  TextColumn get midRoadCurrentNodeId =>
+      text().withDefault(const Constant(''))();
+
+  /// The next-node ID for the company's [midRoadDestination] segment, or
+  /// empty string when there is no mid-road stop.
+  TextColumn get midRoadNextNodeId =>
+      text().withDefault(const Constant(''))();
+
+  /// Fractional progress for the company's [midRoadDestination] along the
+  /// segment described by [midRoadCurrentNodeId] → [midRoadNextNodeId].
+  /// Stored as 0.0 when there is no mid-road stop.
+  RealColumn get midRoadProgress =>
+      real().withDefault(const Constant(0.0))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

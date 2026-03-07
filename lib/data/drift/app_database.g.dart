@@ -905,6 +905,43 @@ class $CompaniesTableTable extends CompaniesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _midRoadCurrentNodeIdMeta =
+      const VerificationMeta('midRoadCurrentNodeId');
+  @override
+  late final GeneratedColumn<String> midRoadCurrentNodeId =
+      GeneratedColumn<String>(
+        'mid_road_current_node_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  static const VerificationMeta _midRoadNextNodeIdMeta = const VerificationMeta(
+    'midRoadNextNodeId',
+  );
+  @override
+  late final GeneratedColumn<String> midRoadNextNodeId =
+      GeneratedColumn<String>(
+        'mid_road_next_node_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  static const VerificationMeta _midRoadProgressMeta = const VerificationMeta(
+    'midRoadProgress',
+  );
+  @override
+  late final GeneratedColumn<double> midRoadProgress = GeneratedColumn<double>(
+    'mid_road_progress',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -915,6 +952,9 @@ class $CompaniesTableTable extends CompaniesTable
     progress,
     compositionJson,
     battleId,
+    midRoadCurrentNodeId,
+    midRoadNextNodeId,
+    midRoadProgress,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -992,6 +1032,33 @@ class $CompaniesTableTable extends CompaniesTable
         battleId.isAcceptableOrUnknown(data['battle_id']!, _battleIdMeta),
       );
     }
+    if (data.containsKey('mid_road_current_node_id')) {
+      context.handle(
+        _midRoadCurrentNodeIdMeta,
+        midRoadCurrentNodeId.isAcceptableOrUnknown(
+          data['mid_road_current_node_id']!,
+          _midRoadCurrentNodeIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mid_road_next_node_id')) {
+      context.handle(
+        _midRoadNextNodeIdMeta,
+        midRoadNextNodeId.isAcceptableOrUnknown(
+          data['mid_road_next_node_id']!,
+          _midRoadNextNodeIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mid_road_progress')) {
+      context.handle(
+        _midRoadProgressMeta,
+        midRoadProgress.isAcceptableOrUnknown(
+          data['mid_road_progress']!,
+          _midRoadProgressMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1033,6 +1100,18 @@ class $CompaniesTableTable extends CompaniesTable
         DriftSqlType.string,
         data['${effectivePrefix}battle_id'],
       )!,
+      midRoadCurrentNodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mid_road_current_node_id'],
+      )!,
+      midRoadNextNodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mid_road_next_node_id'],
+      )!,
+      midRoadProgress: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}mid_road_progress'],
+      )!,
     );
   }
 
@@ -1069,6 +1148,19 @@ class CompaniesTableData extends DataClass
   /// ID of the active battle this Company is locked into, or empty string
   /// when not in battle. Matches [BattlesTable.id] format: "battle_<nodeId>".
   final String battleId;
+
+  /// The current-node ID for the company's [midRoadDestination], or empty
+  /// string when there is no mid-road stop.
+  final String midRoadCurrentNodeId;
+
+  /// The next-node ID for the company's [midRoadDestination] segment, or
+  /// empty string when there is no mid-road stop.
+  final String midRoadNextNodeId;
+
+  /// Fractional progress for the company's [midRoadDestination] along the
+  /// segment described by [midRoadCurrentNodeId] → [midRoadNextNodeId].
+  /// Stored as 0.0 when there is no mid-road stop.
+  final double midRoadProgress;
   const CompaniesTableData({
     required this.id,
     required this.matchId,
@@ -1078,6 +1170,9 @@ class CompaniesTableData extends DataClass
     required this.progress,
     required this.compositionJson,
     required this.battleId,
+    required this.midRoadCurrentNodeId,
+    required this.midRoadNextNodeId,
+    required this.midRoadProgress,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1090,6 +1185,9 @@ class CompaniesTableData extends DataClass
     map['progress'] = Variable<double>(progress);
     map['composition_json'] = Variable<String>(compositionJson);
     map['battle_id'] = Variable<String>(battleId);
+    map['mid_road_current_node_id'] = Variable<String>(midRoadCurrentNodeId);
+    map['mid_road_next_node_id'] = Variable<String>(midRoadNextNodeId);
+    map['mid_road_progress'] = Variable<double>(midRoadProgress);
     return map;
   }
 
@@ -1103,6 +1201,9 @@ class CompaniesTableData extends DataClass
       progress: Value(progress),
       compositionJson: Value(compositionJson),
       battleId: Value(battleId),
+      midRoadCurrentNodeId: Value(midRoadCurrentNodeId),
+      midRoadNextNodeId: Value(midRoadNextNodeId),
+      midRoadProgress: Value(midRoadProgress),
     );
   }
 
@@ -1120,6 +1221,11 @@ class CompaniesTableData extends DataClass
       progress: serializer.fromJson<double>(json['progress']),
       compositionJson: serializer.fromJson<String>(json['compositionJson']),
       battleId: serializer.fromJson<String>(json['battleId']),
+      midRoadCurrentNodeId: serializer.fromJson<String>(
+        json['midRoadCurrentNodeId'],
+      ),
+      midRoadNextNodeId: serializer.fromJson<String>(json['midRoadNextNodeId']),
+      midRoadProgress: serializer.fromJson<double>(json['midRoadProgress']),
     );
   }
   @override
@@ -1134,6 +1240,9 @@ class CompaniesTableData extends DataClass
       'progress': serializer.toJson<double>(progress),
       'compositionJson': serializer.toJson<String>(compositionJson),
       'battleId': serializer.toJson<String>(battleId),
+      'midRoadCurrentNodeId': serializer.toJson<String>(midRoadCurrentNodeId),
+      'midRoadNextNodeId': serializer.toJson<String>(midRoadNextNodeId),
+      'midRoadProgress': serializer.toJson<double>(midRoadProgress),
     };
   }
 
@@ -1146,6 +1255,9 @@ class CompaniesTableData extends DataClass
     double? progress,
     String? compositionJson,
     String? battleId,
+    String? midRoadCurrentNodeId,
+    String? midRoadNextNodeId,
+    double? midRoadProgress,
   }) => CompaniesTableData(
     id: id ?? this.id,
     matchId: matchId ?? this.matchId,
@@ -1155,6 +1267,9 @@ class CompaniesTableData extends DataClass
     progress: progress ?? this.progress,
     compositionJson: compositionJson ?? this.compositionJson,
     battleId: battleId ?? this.battleId,
+    midRoadCurrentNodeId: midRoadCurrentNodeId ?? this.midRoadCurrentNodeId,
+    midRoadNextNodeId: midRoadNextNodeId ?? this.midRoadNextNodeId,
+    midRoadProgress: midRoadProgress ?? this.midRoadProgress,
   );
   CompaniesTableData copyWithCompanion(CompaniesTableCompanion data) {
     return CompaniesTableData(
@@ -1172,6 +1287,15 @@ class CompaniesTableData extends DataClass
           ? data.compositionJson.value
           : this.compositionJson,
       battleId: data.battleId.present ? data.battleId.value : this.battleId,
+      midRoadCurrentNodeId: data.midRoadCurrentNodeId.present
+          ? data.midRoadCurrentNodeId.value
+          : this.midRoadCurrentNodeId,
+      midRoadNextNodeId: data.midRoadNextNodeId.present
+          ? data.midRoadNextNodeId.value
+          : this.midRoadNextNodeId,
+      midRoadProgress: data.midRoadProgress.present
+          ? data.midRoadProgress.value
+          : this.midRoadProgress,
     );
   }
 
@@ -1185,7 +1309,10 @@ class CompaniesTableData extends DataClass
           ..write('destinationNodeId: $destinationNodeId, ')
           ..write('progress: $progress, ')
           ..write('compositionJson: $compositionJson, ')
-          ..write('battleId: $battleId')
+          ..write('battleId: $battleId, ')
+          ..write('midRoadCurrentNodeId: $midRoadCurrentNodeId, ')
+          ..write('midRoadNextNodeId: $midRoadNextNodeId, ')
+          ..write('midRoadProgress: $midRoadProgress')
           ..write(')'))
         .toString();
   }
@@ -1200,6 +1327,9 @@ class CompaniesTableData extends DataClass
     progress,
     compositionJson,
     battleId,
+    midRoadCurrentNodeId,
+    midRoadNextNodeId,
+    midRoadProgress,
   );
   @override
   bool operator ==(Object other) =>
@@ -1212,7 +1342,10 @@ class CompaniesTableData extends DataClass
           other.destinationNodeId == this.destinationNodeId &&
           other.progress == this.progress &&
           other.compositionJson == this.compositionJson &&
-          other.battleId == this.battleId);
+          other.battleId == this.battleId &&
+          other.midRoadCurrentNodeId == this.midRoadCurrentNodeId &&
+          other.midRoadNextNodeId == this.midRoadNextNodeId &&
+          other.midRoadProgress == this.midRoadProgress);
 }
 
 class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
@@ -1224,6 +1357,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
   final Value<double> progress;
   final Value<String> compositionJson;
   final Value<String> battleId;
+  final Value<String> midRoadCurrentNodeId;
+  final Value<String> midRoadNextNodeId;
+  final Value<double> midRoadProgress;
   final Value<int> rowid;
   const CompaniesTableCompanion({
     this.id = const Value.absent(),
@@ -1234,6 +1370,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
     this.progress = const Value.absent(),
     this.compositionJson = const Value.absent(),
     this.battleId = const Value.absent(),
+    this.midRoadCurrentNodeId = const Value.absent(),
+    this.midRoadNextNodeId = const Value.absent(),
+    this.midRoadProgress = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CompaniesTableCompanion.insert({
@@ -1245,6 +1384,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
     this.progress = const Value.absent(),
     required String compositionJson,
     this.battleId = const Value.absent(),
+    this.midRoadCurrentNodeId = const Value.absent(),
+    this.midRoadNextNodeId = const Value.absent(),
+    this.midRoadProgress = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        matchId = Value(matchId),
@@ -1260,6 +1402,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
     Expression<double>? progress,
     Expression<String>? compositionJson,
     Expression<String>? battleId,
+    Expression<String>? midRoadCurrentNodeId,
+    Expression<String>? midRoadNextNodeId,
+    Expression<double>? midRoadProgress,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1271,6 +1416,10 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
       if (progress != null) 'progress': progress,
       if (compositionJson != null) 'composition_json': compositionJson,
       if (battleId != null) 'battle_id': battleId,
+      if (midRoadCurrentNodeId != null)
+        'mid_road_current_node_id': midRoadCurrentNodeId,
+      if (midRoadNextNodeId != null) 'mid_road_next_node_id': midRoadNextNodeId,
+      if (midRoadProgress != null) 'mid_road_progress': midRoadProgress,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1284,6 +1433,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
     Value<double>? progress,
     Value<String>? compositionJson,
     Value<String>? battleId,
+    Value<String>? midRoadCurrentNodeId,
+    Value<String>? midRoadNextNodeId,
+    Value<double>? midRoadProgress,
     Value<int>? rowid,
   }) {
     return CompaniesTableCompanion(
@@ -1295,6 +1447,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
       progress: progress ?? this.progress,
       compositionJson: compositionJson ?? this.compositionJson,
       battleId: battleId ?? this.battleId,
+      midRoadCurrentNodeId: midRoadCurrentNodeId ?? this.midRoadCurrentNodeId,
+      midRoadNextNodeId: midRoadNextNodeId ?? this.midRoadNextNodeId,
+      midRoadProgress: midRoadProgress ?? this.midRoadProgress,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1326,6 +1481,17 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
     if (battleId.present) {
       map['battle_id'] = Variable<String>(battleId.value);
     }
+    if (midRoadCurrentNodeId.present) {
+      map['mid_road_current_node_id'] = Variable<String>(
+        midRoadCurrentNodeId.value,
+      );
+    }
+    if (midRoadNextNodeId.present) {
+      map['mid_road_next_node_id'] = Variable<String>(midRoadNextNodeId.value);
+    }
+    if (midRoadProgress.present) {
+      map['mid_road_progress'] = Variable<double>(midRoadProgress.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1343,6 +1509,9 @@ class CompaniesTableCompanion extends UpdateCompanion<CompaniesTableData> {
           ..write('progress: $progress, ')
           ..write('compositionJson: $compositionJson, ')
           ..write('battleId: $battleId, ')
+          ..write('midRoadCurrentNodeId: $midRoadCurrentNodeId, ')
+          ..write('midRoadNextNodeId: $midRoadNextNodeId, ')
+          ..write('midRoadProgress: $midRoadProgress, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2305,6 +2474,9 @@ typedef $$CompaniesTableTableCreateCompanionBuilder =
       Value<double> progress,
       required String compositionJson,
       Value<String> battleId,
+      Value<String> midRoadCurrentNodeId,
+      Value<String> midRoadNextNodeId,
+      Value<double> midRoadProgress,
       Value<int> rowid,
     });
 typedef $$CompaniesTableTableUpdateCompanionBuilder =
@@ -2317,6 +2489,9 @@ typedef $$CompaniesTableTableUpdateCompanionBuilder =
       Value<double> progress,
       Value<String> compositionJson,
       Value<String> battleId,
+      Value<String> midRoadCurrentNodeId,
+      Value<String> midRoadNextNodeId,
+      Value<double> midRoadProgress,
       Value<int> rowid,
     });
 
@@ -2366,6 +2541,21 @@ class $$CompaniesTableTableFilterComposer
 
   ColumnFilters<String> get battleId => $composableBuilder(
     column: $table.battleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get midRoadCurrentNodeId => $composableBuilder(
+    column: $table.midRoadCurrentNodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get midRoadNextNodeId => $composableBuilder(
+    column: $table.midRoadNextNodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get midRoadProgress => $composableBuilder(
+    column: $table.midRoadProgress,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2418,6 +2608,21 @@ class $$CompaniesTableTableOrderingComposer
     column: $table.battleId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get midRoadCurrentNodeId => $composableBuilder(
+    column: $table.midRoadCurrentNodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get midRoadNextNodeId => $composableBuilder(
+    column: $table.midRoadNextNodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get midRoadProgress => $composableBuilder(
+    column: $table.midRoadProgress,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CompaniesTableTableAnnotationComposer
@@ -2458,6 +2663,21 @@ class $$CompaniesTableTableAnnotationComposer
 
   GeneratedColumn<String> get battleId =>
       $composableBuilder(column: $table.battleId, builder: (column) => column);
+
+  GeneratedColumn<String> get midRoadCurrentNodeId => $composableBuilder(
+    column: $table.midRoadCurrentNodeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get midRoadNextNodeId => $composableBuilder(
+    column: $table.midRoadNextNodeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get midRoadProgress => $composableBuilder(
+    column: $table.midRoadProgress,
+    builder: (column) => column,
+  );
 }
 
 class $$CompaniesTableTableTableManager
@@ -2505,6 +2725,9 @@ class $$CompaniesTableTableTableManager
                 Value<double> progress = const Value.absent(),
                 Value<String> compositionJson = const Value.absent(),
                 Value<String> battleId = const Value.absent(),
+                Value<String> midRoadCurrentNodeId = const Value.absent(),
+                Value<String> midRoadNextNodeId = const Value.absent(),
+                Value<double> midRoadProgress = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CompaniesTableCompanion(
                 id: id,
@@ -2515,6 +2738,9 @@ class $$CompaniesTableTableTableManager
                 progress: progress,
                 compositionJson: compositionJson,
                 battleId: battleId,
+                midRoadCurrentNodeId: midRoadCurrentNodeId,
+                midRoadNextNodeId: midRoadNextNodeId,
+                midRoadProgress: midRoadProgress,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2527,6 +2753,9 @@ class $$CompaniesTableTableTableManager
                 Value<double> progress = const Value.absent(),
                 required String compositionJson,
                 Value<String> battleId = const Value.absent(),
+                Value<String> midRoadCurrentNodeId = const Value.absent(),
+                Value<String> midRoadNextNodeId = const Value.absent(),
+                Value<double> midRoadProgress = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CompaniesTableCompanion.insert(
                 id: id,
@@ -2537,6 +2766,9 @@ class $$CompaniesTableTableTableManager
                 progress: progress,
                 compositionJson: compositionJson,
                 battleId: battleId,
+                midRoadCurrentNodeId: midRoadCurrentNodeId,
+                midRoadNextNodeId: midRoadNextNodeId,
+                midRoadProgress: midRoadProgress,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

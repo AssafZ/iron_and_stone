@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/data/settings_repository.dart';
+import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
+import 'package:iron_and_stone/domain/rules/movement_rules.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/domain/value_objects/road_position.dart';
@@ -733,19 +735,33 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final selectedId = state.selectedCompanyId;
 
     // Use the authoritative match-state company list for merge check.
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
     final authoritativeCompanies =
-        ref.read(matchNotifierProvider).valueOrNull?.companies ?? state.companies;
+        matchState?.companies ?? state.companies;
 
     if (selectedId != null && selectedId != co.id) {
-      // Check if the currently selected Company is on the same node — offer merge.
       final selectedCo = authoritativeCompanies.firstWhere(
         (c) => c.id == selectedId,
         orElse: () => co,
       );
-      if (selectedCo.currentNode.id == co.currentNode.id &&
-          selectedCo.ownership == Ownership.player) {
-        _showMergePrompt(context, selectedCo, co);
-        return;
+      if (selectedCo.ownership == Ownership.player) {
+        // Determine whether the two companies are within proximity-merge distance.
+        // Use roadDistance when both companies have known RoadPositions (mid-road
+        // with midRoadDestination set, or node-stationary).
+        // Fall back to same-node check for marching companies without a mid-road stop.
+        final map = matchState?.match.map;
+        final dist = map != null
+            ? _roadDistanceBetween(selectedCo, co, map)
+            : null;
+
+        final withinThreshold = dist != null
+            ? dist <= kProximityMergeThreshold
+            : selectedCo.currentNode.id == co.currentNode.id;
+
+        if (withinThreshold) {
+          _showMergePrompt(context, selectedCo, co);
+          return;
+        }
       }
     }
 
@@ -754,6 +770,48 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     } else {
       notifier.selectCompany(co.id);
     }
+  }
+
+  /// Compute road distance between two companies using their known [RoadPosition]s.
+  ///
+  /// Returns the road distance in map units, or `null` if a [RoadPosition]
+  /// cannot be constructed for either company (e.g. no midRoadDestination and
+  /// company is marching without a mid-road stop recorded).
+  double? _roadDistanceBetween(
+    CompanyOnMap a,
+    CompanyOnMap b,
+    GameMap map,
+  ) {
+    final posA = _roadPositionOf(a, map);
+    final posB = _roadPositionOf(b, map);
+    if (posA == null || posB == null) return null;
+    return map.roadDistance(posA, posB);
+  }
+
+  /// Derive a [RoadPosition] from a [CompanyOnMap].
+  ///
+  /// - If the company has a [midRoadDestination], use it directly.
+  /// - If the company is at a node (progress == 0), create a zero-progress
+  ///   [RoadPosition] using any outgoing edge from the node (or return null
+  ///   if no edge exists, i.e. isolated node — shouldn't happen on a valid map).
+  ///   For a node-stationary company, all outgoing edges start at the same
+  ///   distance (0) so any choice gives `progress=0` → distance = 0 for
+  ///   same-node comparisons.
+  /// - Otherwise (mid-road without midRoadDestination) return null — cannot
+  ///   determine the next node without direction information.
+  RoadPosition? _roadPositionOf(CompanyOnMap co, GameMap map) {
+    if (co.midRoadDestination != null) return co.midRoadDestination;
+    if (co.progress == 0.0) {
+      // Node-stationary: progress=0, use first outgoing edge for nextNodeId.
+      final edge = map.edges.where((e) => e.from.id == co.currentNode.id).firstOrNull;
+      if (edge == null) return null;
+      return RoadPosition(
+        currentNodeId: co.currentNode.id,
+        nextNodeId: edge.to.id,
+        progress: 0.0,
+      );
+    }
+    return null; // mid-road marching, nextNodeId unknown
   }
 
   /// Show a merge confirmation dialog for two friendly Companies on the same node.
@@ -766,6 +824,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final totalB = b.company.totalSoldiers.value;
     final combined = totalA + totalB;
 
+    // Determine if this is a proximity (road) merge or a direct node merge.
+    // Use proximity merge when either company is mid-road (has midRoadDestination
+    // or progress > 0), so the initiator marches to the target first.
+    final isProximityMerge =
+        a.progress > 0.0 || b.progress > 0.0 ||
+        a.midRoadDestination != null || b.midRoadDestination != null;
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -777,7 +842,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         content: Text(
           'Merge Company ($totalA soldiers) with Company ($totalB soldiers)?\n'
           'Combined: $combined soldiers'
-          '${combined > 50 ? " → primary of 50 + overflow of ${combined - 50}" : ""}.',
+          '${combined > 50 ? " → primary of 50 + overflow of ${combined - 50}" : ""}'
+          '${isProximityMerge ? "\n\nInitiator will march to target position." : ""}.',
           style: const TextStyle(color: AppTheme.ironDark),
         ),
         actions: [
@@ -794,7 +860,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
-              ref.read(companyNotifierProvider.notifier).mergeCompanies(a.id, b.id);
+              if (isProximityMerge) {
+                ref
+                    .read(companyNotifierProvider.notifier)
+                    .initiateProximityMerge(
+                      initiatorId: a.id,
+                      targetId: b.id,
+                    );
+              } else {
+                ref
+                    .read(companyNotifierProvider.notifier)
+                    .mergeCompanies(a.id, b.id);
+              }
             },
             child: const Text('Merge'),
           ),

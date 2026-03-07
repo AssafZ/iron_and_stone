@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
+import 'package:iron_and_stone/domain/entities/proximity_merge_intent.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/rules/movement_rules.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
 import 'package:iron_and_stone/domain/use_cases/merge_companies.dart';
@@ -279,6 +281,109 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
       nodeOccupancy: updatedOcc,
     ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(remaining);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Proximity Merge
+  // ---------------------------------------------------------------------------
+
+  /// Initiate a proximity-based merge where [initiatorId] will auto-march
+  /// toward [targetId] and merge on arrival.
+  ///
+  /// Validates that the road distance is within [kProximityMergeThreshold].
+  /// Sets [ProximityMergeIntent] on the initiator and assigns a mid-road
+  /// destination pointing to the target's current road position.
+  ///
+  /// Does nothing if either company is not found, is in battle, or the
+  /// distance exceeds the threshold.
+  Future<void> initiateProximityMerge({
+    required String initiatorId,
+    required String targetId,
+  }) async {
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
+    final sourceList = matchState?.companies ??
+        (state.valueOrNull ?? const CompanyListState()).companies;
+    final current = state.valueOrNull ?? const CompanyListState();
+    final map = matchState?.match.map;
+    if (map == null) return;
+
+    final initiatorIdx = sourceList.indexWhere((c) => c.id == initiatorId);
+    final targetIdx = sourceList.indexWhere((c) => c.id == targetId);
+    if (initiatorIdx < 0 || targetIdx < 0) return;
+
+    final initiator = sourceList[initiatorIdx];
+    final target = sourceList[targetIdx];
+
+    // Bail if either is in battle.
+    if (initiator.battleId != null || target.battleId != null) return;
+
+    // Validate distance.
+    final targetPos = _roadPositionOf(target, map);
+    if (targetPos == null) return;
+
+    final initiatorPos = _roadPositionOf(initiator, map);
+    if (initiatorPos != null) {
+      final dist = map.roadDistance(initiatorPos, targetPos);
+      if (dist > kProximityMergeThreshold) return;
+    }
+
+    // Set intent and mid-road destination on initiator.
+    final intent = ProximityMergeIntent(targetCompanyId: targetId);
+    var updatedInitiator = initiator.copyWith(proximityMergeIntent: intent);
+
+    // Assign mid-road destination = target's current position.
+    try {
+      updatedInitiator = const MoveCompany().setMidRoadDestination(
+        company: updatedInitiator,
+        dest: targetPos,
+        map: map,
+      );
+    } catch (_) {
+      // If setMidRoadDestination fails (e.g. invalid segment), clear intent.
+      updatedInitiator = initiator.copyWith(proximityMergeIntent: null);
+      return;
+    }
+
+    final newList = List<CompanyOnMap>.from(sourceList)
+      ..[initiatorIdx] = updatedInitiator;
+
+    // Remove from occupancy slot if previously stationary.
+    var updatedOcc = current.nodeOccupancy;
+    if (_isStationary(initiator)) {
+      final nodeId = initiator.currentNode.id;
+      final existingOcc = updatedOcc[nodeId];
+      if (existingOcc != null) {
+        updatedOcc = Map<String, NodeOccupancy>.from(updatedOcc)
+          ..[nodeId] = existingOcc.withDeparture(initiatorId);
+      }
+    }
+
+    state = AsyncData(current.copyWith(
+      companies: newList,
+      nodeOccupancy: updatedOcc,
+    ));
+    ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
+  }
+
+  /// Derive a [RoadPosition] from a [CompanyOnMap].
+  ///
+  /// - If the company has a [CompanyOnMap.midRoadDestination], use it directly.
+  /// - If the company is at a node (progress == 0), create a zero-progress
+  ///   [RoadPosition] using any outgoing edge from the node.
+  /// - Otherwise return null (mid-road without known next node).
+  static RoadPosition? _roadPositionOf(CompanyOnMap co, GameMap map) {
+    if (co.midRoadDestination != null) return co.midRoadDestination;
+    if (co.progress == 0.0) {
+      final edge =
+          map.edges.where((e) => e.from.id == co.currentNode.id).firstOrNull;
+      if (edge == null) return null;
+      return RoadPosition(
+        currentNodeId: co.currentNode.id,
+        nextNodeId: edge.to.id,
+        progress: 0.0,
+      );
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------

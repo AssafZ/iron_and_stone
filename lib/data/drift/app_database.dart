@@ -24,7 +24,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Schema version — increment when tables change.
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -36,6 +36,21 @@ class AppDatabase extends _$AppDatabase {
               companiesTable.battleId,
             );
             await migrator.createTable(battlesTable);
+          }
+          if (from < 3) {
+            // v2 → v3: add mid-road destination columns to companies.
+            await migrator.addColumn(
+              companiesTable,
+              companiesTable.midRoadCurrentNodeId,
+            );
+            await migrator.addColumn(
+              companiesTable,
+              companiesTable.midRoadNextNodeId,
+            );
+            await migrator.addColumn(
+              companiesTable,
+              companiesTable.midRoadProgress,
+            );
           }
         },
       );

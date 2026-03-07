@@ -6,11 +6,15 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/rules/ai_controller.dart';
+import 'package:iron_and_stone/domain/rules/movement_rules.dart';
 import 'package:iron_and_stone/domain/rules/victory_checker.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/deploy_company.dart';
+import 'package:iron_and_stone/domain/use_cases/merge_companies.dart';
+import 'package:iron_and_stone/domain/use_cases/move_company.dart';
 import 'package:iron_and_stone/domain/use_cases/resolve_battle.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 // Re-export MatchOutcome so existing importers of tick_match.dart are unaffected.
 export 'package:iron_and_stone/domain/rules/victory_checker.dart'
@@ -69,6 +73,11 @@ final class TickMatch {
     );
     var updatedCompanies = reinforceResult.$1;
     updatedCastles = reinforceResult.$2;
+
+    // 2. Proximity merge: update initiator destinations to track targets,
+    //    then resolve co-located merges and cancellations.
+    updatedCompanies = _updateProximityMergeDestinations(updatedCompanies, match);
+    updatedCompanies = _resolveProximityMerges(updatedCompanies, match);
 
     // 3. Advance company positions (frozen companies are skipped inside _advance)
     updatedCompanies = _advanceCompanies(updatedCompanies, match);
@@ -673,45 +682,278 @@ final class TickMatch {
     List<CompanyOnMap> companies,
     Match match,
   ) {
-    return companies.map((co) => _advance(co, match)).toList();
+    return companies.map((co) {
+      // T016: companies locked in a battle do NOT advance.
+      if (co.battleId != null) return co;
+      return const MoveCompany().advance(
+        company: co,
+        map: match.map,
+        tickSeconds: _tickSeconds,
+      );
+    }).toList();
   }
 
-  CompanyOnMap _advance(CompanyOnMap co, Match match) {
-    // T016: companies locked in a battle do NOT advance.
-    if (co.battleId != null) return co;
+  // ---------------------------------------------------------------------------
+  // Proximity merge helpers (T039 [US6])
+  // ---------------------------------------------------------------------------
 
-    if (co.destination == null || co.destination!.id == co.currentNode.id) {
-      return co; // stationary or already arrived
-    }
-
-    // Find the next node along the path toward the destination.
-    final path = match.map.pathBetween(co.currentNode, co.destination!);
-    if (path.length < 2) return co; // no valid path
-
-    final nextNode = path[1];
-
-    // Find edge length for the current segment
-    final edge = match.map.edges.firstWhere(
-      (e) => e.from.id == co.currentNode.id && e.to.id == nextNode.id,
-      orElse: () => throw StateError(
-        'No edge from ${co.currentNode.id} to ${nextNode.id}',
-      ),
-    );
-
-    // Advance progress by speed units per tick / edge length
-    final speedPerTick = co.company.movementSpeed.toDouble();
-    final newProgress = co.progress + (speedPerTick * _tickSeconds) / edge.length;
-
-    if (newProgress >= 1.0) {
-      // Arrived at next node — recurse for remaining progress if needed
-      return co.copyWith(
-        currentNode: nextNode,
-        destination: co.destination,
+  /// Derive a [RoadPosition] from [co], or null if unavailable.
+  static RoadPosition? _roadPositionOf(CompanyOnMap co, Match match) {
+    if (co.midRoadDestination != null) return co.midRoadDestination;
+    if (co.progress == 0.0) {
+      final edge =
+          match.map.edges.where((e) => e.from.id == co.currentNode.id).firstOrNull;
+      if (edge == null) return null;
+      return RoadPosition(
+        currentNodeId: co.currentNode.id,
+        nextNodeId: edge.to.id,
         progress: 0.0,
       );
     }
+    return null;
+  }
 
-    return co.copyWith(progress: newProgress);
+  /// Compute the road distance between two companies.
+  ///
+  /// Handles the boundary case where one or both companies are at a node
+  /// (progress == 0.0).  When [a] is at a node (progress == 0) and [b] is
+  /// mid-road, we use [b]'s segment direction for [a] if they share the same
+  /// [currentNode], avoiding the "wrong arbitrary edge" problem.
+  ///
+  /// Returns null when the positions cannot be determined.
+  static double? _roadDistanceBetweenCompanies(
+    CompanyOnMap a,
+    CompanyOnMap b,
+    Match match,
+  ) {
+    // Both at nodes (progress == 0): BFS distance between their nodes.
+    if (a.progress == 0.0 && b.progress == 0.0) {
+      if (a.currentNode.id == b.currentNode.id) return 0.0;
+      // Use roadDistance with a synthetic same-node "segment" is not possible;
+      // fall back to a forward edge for each and rely on roadDistance BFS.
+      // But since both are at progress=0, distance = BFS between nodes.
+      // We can compute this via roadDistance using any outgoing edges.
+      final edgeA = match.map.edges
+          .where((e) => e.from.id == a.currentNode.id)
+          .firstOrNull;
+      final edgeB = match.map.edges
+          .where((e) => e.from.id == b.currentNode.id)
+          .firstOrNull;
+      if (edgeA == null || edgeB == null) return null;
+      return match.map.roadDistance(
+        RoadPosition(
+          currentNodeId: a.currentNode.id,
+          nextNodeId: edgeA.to.id,
+          progress: 0.0,
+        ),
+        RoadPosition(
+          currentNodeId: b.currentNode.id,
+          nextNodeId: edgeB.to.id,
+          progress: 0.0,
+        ),
+      );
+    }
+
+    // [a] is at a node; [b] is mid-road — compute using b's segment for a if
+    // they share the same currentNode, otherwise BFS + b's offset.
+    if (a.progress == 0.0) {
+      final bPos = _midRoadPositionOf(b);
+      if (bPos == null) return null;
+      if (a.currentNode.id == b.currentNode.id) {
+        // Same node: distance = b.progress * edgeLength.
+        final edge = match.map.edges
+            .where((e) => e.from.id == bPos.currentNodeId && e.to.id == bPos.nextNodeId)
+            .firstOrNull;
+        return edge == null ? null : bPos.progress * edge.length;
+      }
+      // Different node: use b's nextNodeId direction for a.
+      final edgeA = match.map.edges
+          .where((e) => e.from.id == a.currentNode.id)
+          .firstOrNull;
+      if (edgeA == null) return null;
+      return match.map.roadDistance(
+        RoadPosition(
+          currentNodeId: a.currentNode.id,
+          nextNodeId: edgeA.to.id,
+          progress: 0.0,
+        ),
+        bPos,
+      );
+    }
+
+    // [b] is at a node; [a] is mid-road.
+    if (b.progress == 0.0) {
+      final aPos = _midRoadPositionOf(a);
+      if (aPos == null) return null;
+      if (b.currentNode.id == a.currentNode.id) {
+        final edge = match.map.edges
+            .where((e) => e.from.id == aPos.currentNodeId && e.to.id == aPos.nextNodeId)
+            .firstOrNull;
+        return edge == null ? null : aPos.progress * edge.length;
+      }
+      final edgeB = match.map.edges
+          .where((e) => e.from.id == b.currentNode.id)
+          .firstOrNull;
+      if (edgeB == null) return null;
+      return match.map.roadDistance(
+        aPos,
+        RoadPosition(
+          currentNodeId: b.currentNode.id,
+          nextNodeId: edgeB.to.id,
+          progress: 0.0,
+        ),
+      );
+    }
+
+    // Both mid-road.
+    final aPos = _midRoadPositionOf(a);
+    final bPos = _midRoadPositionOf(b);
+    if (aPos == null || bPos == null) return null;
+    return match.map.roadDistance(aPos, bPos);
+  }
+
+  /// Derive the mid-road [RoadPosition] from [co]'s current progress,
+  /// using [midRoadDestination] for segment direction.
+  /// Returns null if segment direction is unknown.
+  static RoadPosition? _midRoadPositionOf(CompanyOnMap co) {
+    if (co.midRoadDestination != null) {
+      return RoadPosition(
+        currentNodeId: co.currentNode.id,
+        nextNodeId: co.midRoadDestination!.nextNodeId,
+        progress: co.progress,
+      );
+    }
+    return null;
+  }
+
+  /// For each initiator with a [ProximityMergeIntent], update its
+  /// [CompanyOnMap.midRoadDestination] to point to the target's current
+  /// road position (so it tracks a moving target each tick).
+  List<CompanyOnMap> _updateProximityMergeDestinations(
+    List<CompanyOnMap> companies,
+    Match match,
+  ) {
+    return [
+      for (final co in companies)
+        () {
+          final intent = co.proximityMergeIntent;
+          if (intent == null) return co;
+
+          // Find target.
+          final target = companies
+              .where((c) => c.id == intent.targetCompanyId)
+              .firstOrNull;
+          if (target == null) return co;
+
+          final targetPos = _roadPositionOf(target, match);
+          if (targetPos == null) return co;
+
+          // Update mid-road destination to target's current position.
+          try {
+            return const MoveCompany().setMidRoadDestination(
+              company: co,
+              dest: targetPos,
+              map: match.map,
+            );
+          } catch (_) {
+            return co;
+          }
+        }(),
+    ];
+  }
+
+  /// Resolve proximity merges:
+  /// - Cancel if: target gone, either company in battle, or distance > threshold.
+  /// - Execute merge if initiator is co-located with target (same position).
+  List<CompanyOnMap> _resolveProximityMerges(
+    List<CompanyOnMap> companies,
+    Match match,
+  ) {
+    var result = List<CompanyOnMap>.from(companies);
+
+    // Collect initiators.
+    final initiators = result
+        .where((c) => c.proximityMergeIntent != null)
+        .toList();
+
+    for (final initiator in initiators) {
+      final intent = initiator.proximityMergeIntent!;
+
+      // Find initiator's index in result (may have changed due to prior iterations).
+      final initiatorIdx = result.indexWhere((c) => c.id == initiator.id);
+      if (initiatorIdx < 0) continue;
+
+      final current = result[initiatorIdx];
+
+      // Find target.
+      final targetIdx =
+          result.indexWhere((c) => c.id == intent.targetCompanyId);
+
+      // --- Cancellation conditions ---
+
+      // (1) Target no longer exists.
+      if (targetIdx < 0) {
+        result[initiatorIdx] = current.copyWith(
+          proximityMergeIntent: null,
+          midRoadDestination: null,
+        );
+        continue;
+      }
+
+      final target = result[targetIdx];
+
+      // (2) Either company is in battle.
+      if (current.battleId != null || target.battleId != null) {
+        result[initiatorIdx] = current.copyWith(
+          proximityMergeIntent: null,
+          midRoadDestination: null,
+        );
+        continue;
+      }
+
+      // (3) Distance exceeds threshold.
+      // Use actual current positions (not midRoadDestination) to check distance.
+      final dist = _roadDistanceBetweenCompanies(current, target, match);
+      if (dist != null && dist > kProximityMergeThreshold) {
+        result[initiatorIdx] = current.copyWith(
+          proximityMergeIntent: null,
+          midRoadDestination: null,
+        );
+        continue;
+      }
+
+      // --- Merge condition: co-located (same node, same progress) ---
+      final sameNode = current.currentNode.id == target.currentNode.id;
+      final sameProgress =
+          (current.progress - target.progress).abs() < 0.001;
+
+      if (sameNode && sameProgress) {
+        // Execute merge.
+        try {
+          final mergeResult = const MergeCompanies().merge(
+            companyA: current,
+            companyB: target,
+            newId: current.id, // keep initiator's id
+            overflowId: '${current.id}_overflow',
+          );
+          result
+            ..removeAt(initiatorIdx)
+            ..removeWhere((c) => c.id == target.id)
+            ..add(mergeResult.primary.copyWith(proximityMergeIntent: null));
+          if (mergeResult.overflow != null) {
+            result.add(mergeResult.overflow!);
+          }
+        } catch (e) {
+          // If merge fails, just cancel the intent.
+          result[initiatorIdx] = current.copyWith(
+            proximityMergeIntent: null,
+            midRoadDestination: null,
+          );
+        }
+      }
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------

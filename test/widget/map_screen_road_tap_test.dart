@@ -2,6 +2,8 @@
 // Red-Green-Refactor: these tests must FAIL before T017 / T018 implementation.
 // T031 [US5] — Splitting a mid-road company produces two markers at distinct
 // canvas positions, each independently tappable.
+// T036 [US6] — Proximity merge dialog appears when selected company is within
+// kProximityMergeThreshold of tapped friendly company; no dialog when beyond.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/ui/screens/map_screen.dart';
@@ -335,11 +338,89 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // T036 [US6]: Proximity merge dialog
+  // ---------------------------------------------------------------------------
+  group('T036 [US6]: proximity merge dialog', () {
+    testWidgets(
+      '(a) select company A then tap company B (25 units away) → merge dialog appears',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              matchNotifierProvider.overrideWith(_FakeProximityMatchNotifier.new),
+            ],
+            child: const MaterialApp(home: MapScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Select company A first.
+        final markerA = find.byKey(const ValueKey('company_marker_co_a'));
+        expect(markerA, findsOneWidget,
+            reason: 'Company A marker must be visible');
+        await tester.tap(markerA);
+        await tester.pumpAndSettle();
+
+        // Now tap company B (25 units from A — within threshold).
+        final markerB = find.byKey(const ValueKey('company_marker_co_b'));
+        expect(markerB, findsOneWidget,
+            reason: 'Company B marker must be visible');
+        await tester.tap(markerB);
+        await tester.pumpAndSettle();
+
+        // The merge dialog must appear.
+        expect(
+          find.text('Merge Companies?'),
+          findsOneWidget,
+          reason:
+              'Merge dialog must appear when tapping a friendly company '
+              'within kProximityMergeThreshold',
+        );
+      },
+    );
+
+    testWidgets(
+      '(b) select company A then tap company C (55 units away) → no dialog',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              matchNotifierProvider.overrideWith(_FakeProximityMatchNotifier.new),
+            ],
+            child: const MaterialApp(home: MapScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Select company A first.
+        final markerA = find.byKey(const ValueKey('company_marker_co_a'));
+        expect(markerA, findsOneWidget,
+            reason: 'Company A marker must be visible');
+        await tester.tap(markerA);
+        await tester.pumpAndSettle();
+
+        // Now tap company C (55 units from A — beyond threshold).
+        final markerC = find.byKey(const ValueKey('company_marker_co_c'));
+        expect(markerC, findsOneWidget,
+            reason: 'Company C marker must be visible');
+        await tester.tap(markerC);
+        await tester.pumpAndSettle();
+
+        // The merge dialog must NOT appear.
+        expect(
+          find.text('Merge Companies?'),
+          findsNothing,
+          reason:
+              'Merge dialog must NOT appear when tapping a friendly company '
+              'beyond kProximityMergeThreshold',
+        );
+      },
+    );
+  });
 }
 
-// ---------------------------------------------------------------------------
-// Fake MatchNotifier for T031: seeds a mid-road stationary company
-// ---------------------------------------------------------------------------
 
 class _FakeMatchNotifier extends MatchNotifier {
   @override
@@ -365,6 +446,82 @@ class _FakeMatchNotifier extends MatchNotifier {
       ),
       castles: const [],
       companies: [midRoadCo],
+      activeBattles: const [],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fake MatchNotifier for T036: seeds two mid-road companies at known positions
+// ---------------------------------------------------------------------------
+
+/// Seeds three player companies on the player_castle→j1 segment (length 100).
+/// All companies have midRoadDestination set so their RoadPosition is known.
+///
+/// Company A: player_castle→j1 at progress=0.25 (25 units in).
+/// Company B: player_castle→j1 at progress=0.50 (50 units in → 25 units from A → within threshold=30).
+/// Company C: player_castle→j1 at progress=0.80 (80 units in → 55 units from A → beyond threshold=30).
+class _FakeProximityMatchNotifier extends MatchNotifier {
+  @override
+  Future<MatchState> build() async {
+    final map = GameMapFixture.build();
+    final playerCastle =
+        map.nodes.firstWhere((n) => n.id == GameMapFixture.playerCastleId);
+
+    final segA = RoadPosition(
+      currentNodeId: GameMapFixture.playerCastleId,
+      nextNodeId: 'j1',
+      progress: 0.25,
+    );
+    final segB = RoadPosition(
+      currentNodeId: GameMapFixture.playerCastleId,
+      nextNodeId: 'j1',
+      progress: 0.50,
+    );
+    final segC = RoadPosition(
+      currentNodeId: GameMapFixture.playerCastleId,
+      nextNodeId: 'j1',
+      progress: 0.80,
+    );
+
+    // Company A — the one we'll select first.
+    final coA = CompanyOnMap(
+      id: 'co_a',
+      ownership: Ownership.player,
+      currentNode: playerCastle,
+      progress: 0.25,
+      midRoadDestination: segA,
+      company: Company(composition: {UnitRole.warrior: 5}),
+    );
+
+    // Company B — 25 units from A on the same segment (within threshold=30).
+    final coB = CompanyOnMap(
+      id: 'co_b',
+      ownership: Ownership.player,
+      currentNode: playerCastle,
+      progress: 0.50,
+      midRoadDestination: segB,
+      company: Company(composition: {UnitRole.warrior: 5}),
+    );
+
+    // Company C — 55 units from A on the same segment (beyond threshold=30).
+    final coC = CompanyOnMap(
+      id: 'co_c',
+      ownership: Ownership.player,
+      currentNode: playerCastle,
+      progress: 0.80,
+      midRoadDestination: segC,
+      company: Company(composition: {UnitRole.warrior: 5}),
+    );
+
+    return MatchState(
+      match: Match(
+        map: map,
+        humanPlayer: Ownership.player,
+        phase: MatchPhase.playing,
+      ),
+      castles: const [],
+      companies: [coA, coB, coC],
       activeBattles: const [],
     );
   }
