@@ -31,9 +31,12 @@ RoadPosition
 
 **Persistence** (drift column triple):
 ```
-segment_id   TEXT  — "currentNodeId__nextNodeId" (from RoadEdge.id)
-progress     REAL  — stored with full double precision
-next_node_id TEXT  — redundant with segment_id but explicit for query clarity
+road_edge_id         TEXT  — stores RoadEdge.id = "${from.id}__${to.id}"; uniquely identifies
+                             the directed segment; is the authoritative persistence key
+mid_road_progress    REAL  — stored with full double precision
+mid_road_next_node_id TEXT — intentionally denormalised from road_edge_id for query performance;
+                             equals the second token of road_edge_id (split on "__");
+                             must be kept in sync with road_edge_id on every write
 ```
 
 ---

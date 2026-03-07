@@ -56,8 +56,8 @@ lib/
 ├── domain/
 │   ├── entities/
 │   │   ├── road_edge.dart          MODIFY  add stable `id` field for persistence
-│   │   ├── game_map.dart           MODIFY  add castle-on-road validation + mid-road hit-test
-│   │   └── game_map_fixture.dart   MODIFY  add RoadEdge ids (validates castle constraint)
+│   │   └── game_map.dart           MODIFY  add castle-on-road validation + mid-road hit-test
+│   │   └── game_map_fixture.dart   NO CHANGE  RoadEdge.id is computed in the constructor; no call-site edits needed
 │   ├── value_objects/
 │   │   └── road_position.dart      NEW     fractional road coordinate value object
 │   ├── rules/
@@ -65,7 +65,7 @@ lib/
 │   └── use_cases/
 │       ├── check_collisions.dart   MODIFY  add CompanyOnMap.roadSegmentId; mid-road collision
 │       ├── move_company.dart       MODIFY  setMidRoadDestination; ProximityMergeIntent support
-│       ├── merge_companies.dart    MODIFY  proximity merge: march-to-merge lifecycle
+│       ├── merge_companies.dart    AUDIT   same-node precondition (line 52) is satisfied when proximity-merge initiator arrives; confirm in T039 — no code change anticipated
 │       └── split_company.dart      no change (position is inherited)
 │
 ├── state/
@@ -100,5 +100,4 @@ test/
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| — | N/A — all 5 principles pass | — |

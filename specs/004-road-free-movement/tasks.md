@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/004-road-free-movement/`  
 **Branch**: `004-road-free-movement`  
-**Prerequisites**: plan.md ✅ spec.md ✅ research.md ✅ data-model.md ✅ quickstart.md ✅
+**Prerequisites**: plan.md ✅ spec.md ✅ research.md ✅ data-model.md ✅ quickstart.md ✅ analysis.md ✅
 
 **Tests**: Test tasks are **REQUIRED** — Constitution Principle III (Test-First for Game Rules) is NON-NEGOTIABLE. All domain tasks follow Red-Green-Refactor: failing test first, then implementation.
 
@@ -36,8 +36,8 @@
 
 ### 2A — `RoadPosition` value object (blocks US1–US6)
 
-- [ ] T004 Write failing unit tests for `RoadPosition` value object in `test/domain/value_objects/road_position_test.dart` — cover: valid progress `[0.0, 0.999]`, `progress = 1.0` throws `ArgumentError`, `progress < 0.0` throws `ArgumentError`, `currentNodeId == nextNodeId` throws `ArgumentError`
-- [ ] T005 Create `lib/domain/value_objects/road_position.dart` — implement `final class RoadPosition` with fields `currentNodeId`, `progress`, `nextNodeId`; constructor validates `progress ∈ [0.0, 1.0)` and `currentNodeId ≠ nextNodeId`; implement `==` and `hashCode`; confirm T004 tests pass
+- [ ] T004 Write failing unit tests for `RoadPosition` value object in `test/domain/value_objects/road_position_test.dart` — cover: valid progress `[0.0, 1.0)` (any `double < 1.0` is accepted, e.g. `0.9999` must pass), `progress = 1.0` throws `ArgumentError`, `progress < 0.0` throws `ArgumentError`, `currentNodeId == nextNodeId` throws `ArgumentError`
+- [ ] T005 Create `lib/domain/value_objects/road_position.dart` — implement `final class RoadPosition` with fields `currentNodeId`, `progress`, `nextNodeId`; constructor validates `progress >= 1.0 || progress < 0.0` throws `ArgumentError` (half-open range `[0.0, 1.0)`) and `currentNodeId != nextNodeId`; implement `==` and `hashCode`; confirm T004 tests pass
 
 ### 2B — `RoadEdge.id` stable identifier (blocks US1, US3, persistence)
 
@@ -131,12 +131,13 @@
 
 ### Tests for User Story 4 ⚠️ Write and confirm FAILING before implementation
 
-- [ ] T026 [P] [US4] Write failing test in `test/domain/use_cases/move_company_test.dart` — `setMidRoadDestination` throws `MoveCompanyException` for a `RoadPosition` referencing a segment not in the map (already included in T012-b; confirm it is red before T016)
+- [ ] T026 [P] [US4] *(Confirmation only — no new test file)* Verify the failing test in T012-b (`setMidRoadDestination` throws `MoveCompanyException` for a segment not in the map) is still red before T016 is implemented. T012-b is the canonical test; this task is a pre-implementation gate, not a separate test.
 - [ ] T027 [P] [US4] Write failing test in `test/domain/use_cases/tick_match_test.dart` — after any tick, assert every `CompanyOnMap` in the result satisfies: either `progress == 0.0` (at a node) or there exists a `RoadEdge` with `from.id == co.currentNode.id`
 
 ### Implementation for User Story 4
 
-- [ ] T028 [US4] Verify T016's `setMidRoadDestination` already throws on invalid segment (segment validation from T012-b); if not, tighten the validation in `lib/domain/use_cases/move_company.dart`
+> **Checkpoint (no task)**: T016's `setMidRoadDestination` already validates that the supplied `RoadPosition` references a segment present in the map (segment-existence guard from T012-b / T016 implementation). Before starting T029, confirm this guard is in place; if not, tighten the validation in `lib/domain/use_cases/move_company.dart` as part of T016.
+
 - [ ] T029 [US4] Modify `lib/domain/use_cases/tick_match.dart` — add a post-tick `assert` (debug-mode invariant) that every company in `updatedCompanies` satisfies the off-road invariant; confirm T027 passes
 
 **Checkpoint**: Off-road positions are impossible via any public API. US4 invariant holds.
@@ -179,7 +180,7 @@
 
 - [ ] T037 [US6] Modify `lib/ui/screens/map_screen.dart` (`_onCompanyTap`) — when a company is already selected and the tapped company is friendly and on the road, compute `map.roadDistance` between them; if within `kProximityMergeThreshold` show `_showMergePrompt`; if beyond threshold do not show dialog (existing co-location check already covers `== 0` distance); confirm T036 passes
 - [ ] T038 [US6] Modify `lib/state/company_notifier.dart` — add `initiateProximityMerge(String initiatorId, String targetId)` action: validates distance ≤ threshold, sets `proximityMergeIntent` on initiator, calls `setMidRoadDestination` to target's current road position; update `mergeCompanies` to handle proximity case (march destination set; do not execute merge immediately)
-- [ ] T039 [US6] Modify `lib/domain/use_cases/tick_match.dart` — add `_resolveProximityMerges` step after movement, before collision: for each company with `proximityMergeIntent` check cancellation conditions (target gone, distance > threshold, either party in battle); on cancellation clear intent + set `destination = null`; on arrival (positions match) invoke `MergeCompanies.merge` and remove initiator; confirm T034 passes
+- [ ] T039 [US6] Modify `lib/domain/use_cases/tick_match.dart` — add `_resolveProximityMerges` step. **Tick pipeline order (critical)**: this step runs AFTER `_updateProximityMergeDestinations` (re-routes initiator to target's current position) and BEFORE `MoveCompany.advance`, so updated destinations are consumed in the same tick they are computed. Within `_resolveProximityMerges`: for each company with `proximityMergeIntent` check cancellation conditions (target gone, distance > threshold, either party in battle); on cancellation clear intent + set `destination = null`; on arrival call `MergeCompanies.merge` — **note**: `MergeCompanies.merge` currently requires `companyA.currentNode.id == companyB.currentNode.id`; when the initiator arrives at the target's mid-road position both companies share `currentNode` (the initiator snapped to the same node-checkpoint), so the precondition is satisfied. If the target is stationary mid-road at `progress > 0.0`, both companies will have the same `currentNode.id` after the initiator arrives — confirm this in the arrival-detection logic and add an assertion. Remove initiator after merge; confirm T034 passes
 
 **Checkpoint**: Proximity merge complete, cancellable, and battle-safe. US6 complete.
 
@@ -189,11 +190,12 @@
 
 **Purpose**: Persistence, visual regression, analysis, and final validation
 
-- [ ] T040 [P] Modify drift schema in `lib/data/` — add `segment_id TEXT`, `progress REAL`, `next_node_id TEXT` columns to company table; write round-trip test in `test/data/` confirming `RoadPosition` survives save/restore with zero drift (SC-005)
+- [ ] T040 [P] Modify drift schema — add three new columns to the company table in `lib/data/tables/company_table.dart` (or the equivalent drift `.drift` file under `lib/data/`): `road_edge_id TEXT` (stores `RoadEdge.id = "${from.id}__${to.id}"`), `mid_road_progress REAL`, `mid_road_next_node_id TEXT` (intentionally denormalised from `road_edge_id` for query clarity — must stay in sync on write). Bump the drift schema migration to the next version number in `lib/data/app_database.dart` and add a migration step that defaults new columns to `NULL` for existing rows. Write a DAO round-trip test in `test/data/company_dao_test.dart` that inserts a `CompanyOnMap` with a non-null `midRoadDestination`, reads it back, and asserts `(road_edge_id, mid_road_progress, mid_road_next_node_id)` are bit-for-bit equal (SC-005 partial — DAO layer only)
+- [ ] T040-b [P] Write integration test in `test/integration/mid_road_persistence_test.dart` — (1) create a `Match` with one company holding a non-null `midRoadDestination` at `progress = 0.4` on a known edge; (2) save the full game state via drift; (3) cold-rebuild `TickMatch` from the saved rows; (4) assert the company's `(currentNode.id, progress, midRoadDestination.currentNodeId, midRoadDestination.progress, midRoadDestination.nextNodeId)` is identical before and after; (5) advance one tick and confirm the company continues marching from the correct fractional position (SC-005 — full game-state round-trip)
 - [ ] T041 [P] Create golden test in `test/golden/mid_road_company_marker_test.dart` — render two company markers at offset mid-road positions; assert pixel-level golden matches (SC-007 visual regression)
 - [ ] T042 Run full `flutter test` suite — confirm zero failures across all 9 phases
 - [ ] T043 Run `flutter analyze` — confirm zero issues (treat warnings as errors per constitution)
-- [ ] T044 [P] Profile with Flutter DevTools — confirm 60 fps during 10 simultaneously marching companies (SC-006); attach screenshot to PR description
+- [ ] T044 [P] Performance profiling — confirm 60 fps during 10 simultaneously marching companies (SC-006). Steps: (a) run `flutter run --profile` on a Snapdragon 665 device or emulator (or physical Pixel 4a as specified in plan.md); (b) use the reproducible scenario in `test/integration/` that deploys 10 player companies and issues mid-road march orders to all of them simultaneously; (c) open Flutter DevTools → Performance tab → record ≥ 10 seconds of active movement; (d) confirm **p99 raster frame time ≤ 16 ms** (no missed frames at 60 fps budget); (e) attach a DevTools Timeline screenshot to the PR description. Fail criterion: any raster frame > 16 ms at the p99 level during steady-state 10-company movement.
 - [ ] T045 [P] Update `specs/004-road-free-movement/checklists/requirements.md` — mark all items complete; confirm SC-001 through SC-008 are satisfied
 
 ---
