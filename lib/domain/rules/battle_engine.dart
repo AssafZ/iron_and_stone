@@ -2,6 +2,7 @@ import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/rules/terrain_bonus.dart';
+import 'package:iron_and_stone/domain/value_objects/soldier_count.dart';
 
 /// The result of resolving one battle round.
 final class BattleRoundResult {
@@ -164,20 +165,58 @@ final class BattleEngine {
   }
 
   /// Rebuild Company list from HP map — only include roles/units still alive.
+  ///
+  /// Survivors are partitioned into [Company]s of at most [SoldierCount.max]
+  /// (50) soldiers each, preserving the [SoldierCount] invariant even when the
+  /// original side had more than 50 soldiers spread across multiple companies.
   List<Company> _companiesFromHp(
     List<Company> original,
     Map<String, int> hpMap,
   ) {
     if (hpMap.isEmpty) return const [];
 
-    // Count surviving units per role from the HP map
-    final composition = <UnitRole, int>{};
+    // Count surviving units per role from the HP map.
+    final roleCounts = <UnitRole, int>{};
     for (final key in hpMap.keys) {
       final role = _roleFromKey(key);
-      composition[role] = (composition[role] ?? 0) + 1;
+      roleCounts[role] = (roleCounts[role] ?? 0) + 1;
     }
-    if (composition.isEmpty) return const [];
-    return [Company(composition: composition)];
+    if (roleCounts.isEmpty) return const [];
+
+    // If total ≤ 50 we can return a single Company (common case).
+    final total = roleCounts.values.fold(0, (s, n) => s + n);
+    if (total <= SoldierCount.max) {
+      return [Company(composition: roleCounts)];
+    }
+
+    // Otherwise split into Company-sized chunks of ≤ 50 soldiers each.
+    // Fill each Company greedily, role by role (preserving proportions
+    // as closely as possible while respecting per-role counts).
+    final companies = <Company>[];
+    final remaining = Map<UnitRole, int>.from(roleCounts);
+
+    while (remaining.values.any((n) => n > 0)) {
+      final chunk = <UnitRole, int>{};
+      var slots = SoldierCount.max;
+
+      for (final role in UnitRole.values) {
+        if (slots <= 0) break;
+        final available = remaining[role] ?? 0;
+        if (available <= 0) continue;
+        final take = available.clamp(0, slots);
+        chunk[role] = take;
+        remaining[role] = available - take;
+        slots -= take;
+      }
+
+      if (chunk.isNotEmpty) {
+        companies.add(Company(composition: chunk));
+      } else {
+        break; // safety: avoid infinite loop
+      }
+    }
+
+    return companies;
   }
 
   UnitRole _roleFromKey(String key) {
