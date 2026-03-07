@@ -159,9 +159,7 @@ final class GameMap {
       final current = queue.removeFirst();
       final currentDist = dist[current.id]!;
 
-      for (final entry in (adjacency[current.id] ?? [])) {
-        final neighbour = entry.$1;
-        final edgeLen = entry.$2;
+      for (final (MapNode neighbour, double edgeLen) in (adjacency[current.id] ?? <(MapNode, double)>[])) {
         final newDist = currentDist + edgeLen;
         if (!dist.containsKey(neighbour.id) || newDist < dist[neighbour.id]!) {
           dist[neighbour.id] = newDist;

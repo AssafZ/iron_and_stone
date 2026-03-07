@@ -2,6 +2,7 @@ import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/rules/movement_rules.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 /// Returned by [MoveCompany.advanceWithBattleCheck] when a Company arrives at a
 /// node that has an active battle — the company should be routed as a
@@ -56,23 +57,106 @@ final class MoveCompany {
     return company.copyWith(destination: destination);
   }
 
+  /// Assign a mid-road fractional stop position to [company].
+  ///
+  /// The company will march toward [dest.currentNodeId] and stop at the
+  /// fractional progress [dest.progress] along the segment to [dest.nextNodeId].
+  ///
+  /// Throws [MoveCompanyException] if:
+  /// - [company] is locked in a battle.
+  /// - The segment described by [dest] does not exist in [map].
+  CompanyOnMap setMidRoadDestination({
+    required CompanyOnMap company,
+    required RoadPosition dest,
+    required GameMap map,
+  }) {
+    if (company.battleId != null) {
+      throw MoveCompanyException(
+        'Company ${company.id} is locked in battle ${company.battleId} '
+        'and cannot receive a new mid-road destination.',
+      );
+    }
+
+    // Validate that the segment exists in the map.
+    final segmentExists = map.edges.any(
+      (e) => e.from.id == dest.currentNodeId && e.to.id == dest.nextNodeId,
+    );
+    if (!segmentExists) {
+      throw MoveCompanyException(
+        'Segment "${dest.currentNodeId} → ${dest.nextNodeId}" does not exist '
+        'in the map.',
+      );
+    }
+
+    // Find the "next node" of the segment — we need it as the march destination
+    // so the company walks toward the segment start.
+    final nextNode = map.nodes
+        .where((n) => n.id == dest.nextNodeId)
+        .firstOrNull;
+    if (nextNode == null) {
+      throw MoveCompanyException(
+        'Node "${dest.nextNodeId}" not found in the map.',
+      );
+    }
+
+    // Use the segment's currentNodeId as the interim march destination.
+    // The company needs to first navigate to dest.currentNodeId before
+    // entering the segment; if it's already there the march starts immediately.
+    final destNode = map.nodes
+        .where((n) => n.id == dest.currentNodeId)
+        .firstOrNull;
+    if (destNode == null) {
+      throw MoveCompanyException(
+        'Node "${dest.currentNodeId}" not found in the map.',
+      );
+    }
+
+    return company.copyWith(
+      midRoadDestination: dest,
+      destination: null,
+    );
+  }
+
   /// Advance [company] position by one tick of [tickSeconds] seconds.
   ///
   /// Delegates to [MovementRules.advancePosition] and returns an updated
-  /// [CompanyOnMap].
+  /// [CompanyOnMap]. When a [midRoadDestination] is set and the company
+  /// reaches it, [midRoadDestination] is cleared and the company becomes
+  /// stationary at that fractional position.
   CompanyOnMap advance({
     required CompanyOnMap company,
     required GameMap map,
     required double tickSeconds,
   }) {
+    // Derive an effective march destination: use the explicit `destination`
+    // field if set; otherwise derive from `midRoadDestination.nextNodeId`
+    // so the company marches onto the target segment automatically.
+    MapNode? effectiveDest = company.destination;
+    if (effectiveDest == null && company.midRoadDestination != null) {
+      effectiveDest = map.nodes
+          .where((n) => n.id == company.midRoadDestination!.nextNodeId)
+          .firstOrNull;
+    }
+
     final result = MovementRules.advancePosition(
       currentNode: company.currentNode,
-      destination: company.destination,
+      destination: effectiveDest,
       progress: company.progress,
       company: company.company,
       map: map,
       tickSeconds: tickSeconds,
+      midRoadDest: company.midRoadDestination,
     );
+
+    if (result.reachedMidRoad) {
+      // Company arrived at its mid-road stop — clear destination and intent.
+      return company.copyWith(
+        currentNode: result.currentNode,
+        progress: result.progress,
+        destination: null,
+        midRoadDestination: null,
+      );
+    }
 
     return company.copyWith(
       currentNode: result.currentNode,

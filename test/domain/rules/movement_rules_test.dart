@@ -9,6 +9,7 @@ import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/rules/movement_rules.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -201,6 +202,99 @@ void main() {
         );
         expect(result.currentNode.id, equals(_junction1.id));
         expect(result.progress, equals(0.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // T013 — advancePosition mid-road stop (US1)
+    // -------------------------------------------------------------------------
+    group('advancePosition mid-road stop', () {
+      late GameMap map;
+
+      setUp(() {
+        map = _makeMap();
+      });
+
+      test(
+          '(a) company reaches midRoadDest.progress within a tick → '
+          'reachedMidRoad = true and progress clamped to dest',
+          () {
+        // Warrior speed 6, edge 100, tick 10 s → advances 0.6 per tick.
+        // Start at progress 0.0 with midRoadDest at progress 0.4.
+        // After one tick we would reach 0.6 which is > 0.4, so must clamp to 0.4.
+        final company = Company(composition: {UnitRole.warrior: 5});
+        final midRoadDest = RoadPosition(
+          currentNodeId: _playerCastle.id,
+          progress: 0.4,
+          nextNodeId: _junction1.id,
+        );
+        final result = MovementRules.advancePosition(
+          currentNode: _playerCastle,
+          destination: _junction1,
+          progress: 0.0,
+          company: company,
+          map: map,
+          tickSeconds: 10.0,
+          midRoadDest: midRoadDest,
+        );
+        expect(result.reachedMidRoad, isTrue);
+        expect(result.progress, closeTo(0.4, 0.0001));
+        expect(result.currentNode.id, equals(_playerCastle.id));
+      });
+
+      test(
+          '(b) company does not yet reach midRoadDest.progress → '
+          'reachedMidRoad = false and progress advances normally',
+          () {
+        // Warrior speed 6, edge 100, tick 1 s → advances 0.06 per tick.
+        // MidRoadDest at 0.9 — company starts at 0.0, won't reach 0.9 in 1 s.
+        final company = Company(composition: {UnitRole.warrior: 5});
+        final midRoadDest = RoadPosition(
+          currentNodeId: _playerCastle.id,
+          progress: 0.9,
+          nextNodeId: _junction1.id,
+        );
+        final result = MovementRules.advancePosition(
+          currentNode: _playerCastle,
+          destination: _junction1,
+          progress: 0.0,
+          company: company,
+          map: map,
+          tickSeconds: 1.0,
+          midRoadDest: midRoadDest,
+        );
+        expect(result.reachedMidRoad, isFalse);
+        expect(result.progress, closeTo(0.06, 0.0001));
+        expect(result.currentNode.id, equals(_playerCastle.id));
+      });
+
+      test(
+          '(c) company on wrong segment (different currentNode) advances '
+          'toward midRoadDest.currentNodeId ignoring mid-road stop',
+          () {
+        // Company is on j1→j2 but midRoadDest targets pc→j1 segment.
+        // The company must keep marching toward the dest.currentNodeId (pc)
+        // and must NOT stop mid-road on this irrelevant segment.
+        final company = Company(composition: {UnitRole.warrior: 5});
+        final midRoadDest = RoadPosition(
+          currentNodeId: _playerCastle.id,
+          progress: 0.5,
+          nextNodeId: _junction1.id,
+        );
+        // Company is at j1 heading toward j2, mid-road dest is on different segment.
+        // We set destination = j2 so the path is j1 → j2.
+        final result = MovementRules.advancePosition(
+          currentNode: _junction1,
+          destination: _junction2,
+          progress: 0.0,
+          company: company,
+          map: map,
+          tickSeconds: 1.0,
+          midRoadDest: midRoadDest,
+        );
+        expect(result.reachedMidRoad, isFalse);
+        // Company is on j1→j2, not pc→j1, so it should advance normally.
+        expect(result.progress, greaterThan(0.0));
       });
     });
   });

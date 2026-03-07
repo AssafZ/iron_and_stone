@@ -7,6 +7,7 @@ import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/battle_screen.dart';
@@ -46,6 +47,16 @@ const List<(double, double)> _kSlotOffsets = [
   (-_kSlotRadius, _kSlotRadius),     // slot 7 — bottom-left
   (_kSlotRadius, _kSlotRadius),      // slot 8 — bottom-right
 ];
+
+/// Road hit-test snap radius in canvas pixels.
+///
+/// A tap within this distance of any road edge line is treated as a road tap.
+const double _kRoadSnapPixels = 20.0;
+
+/// Node hit-test snap radius in canvas pixels.
+///
+/// A tap within this distance of any node centre is treated as a node tap.
+const double _kNodeSnapPixels = 24.0;
 
 /// Builds a node-occupancy map directly from the authoritative company list.
 ///
@@ -385,7 +396,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'Company selected — tap any node to march there',
+                    'Company selected — tap any road point or node to march there',
                     style: TextStyle(
                       color: AppTheme.ironDark,
                       fontWeight: FontWeight.w600,
@@ -407,7 +418,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             minScale: 0.3,
             maxScale: 3.0,
             constrained: false,
-            child: SizedBox(
+            child: GestureDetector(
+              key: const ValueKey('map_canvas_gesture'),
+              onTapDown: (details) => _onCanvasTapDown(
+                details,
+                matchState,
+                companyState,
+                context,
+              ),
+              child: SizedBox(
               width: MapScreen._canvasWidth,
               height: MapScreen._canvasHeight,
               child: Stack(
@@ -517,9 +536,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     ),
                 ],
               ),
-            ),
-          ),
-        ),
+            ), // SizedBox
+          ), // GestureDetector
+        ), // InteractiveViewer
+      ), // Expanded
       ],
     );
   }
@@ -527,6 +547,117 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // ---------------------------------------------------------------------------
   // Tap handlers
   // ---------------------------------------------------------------------------
+
+  /// Handles a raw tap on the canvas (outside of individual node/company widgets).
+  ///
+  /// Converts the global tap position to canvas-space coordinates via the
+  /// [TransformationController], then:
+  /// 1. If a node is within [_kNodeSnapPixels], delegates to [_onNodeTap].
+  /// 2. If a road segment is within [_kRoadSnapPixels], calls
+  ///    [setMidRoadDestination] on the selected company.
+  /// 3. Otherwise silently ignores the tap.
+  void _onCanvasTapDown(
+    TapDownDetails details,
+    MatchState matchState,
+    CompanyListState companyState,
+    BuildContext context,
+  ) {
+    // The GestureDetector wraps the SizedBox that IS the canvas, so
+    // details.localPosition is already in canvas coordinates — no transform
+    // conversion needed.
+    final canvasPoint = details.localPosition;
+
+    // Check node hit first (higher priority).
+    for (final node in matchState.match.map.nodes) {
+      final (nx, ny) = _nodeCanvasPos(node);
+      final dx = canvasPoint.dx - nx;
+      final dy = canvasPoint.dy - ny;
+      if (dx * dx + dy * dy <= _kNodeSnapPixels * _kNodeSnapPixels) {
+        _onNodeTap(context, node, matchState, companyState);
+        return;
+      }
+    }
+
+    // Check road hit.
+    final selectedId = companyState.selectedCompanyId;
+    if (selectedId == null) return;
+
+    final selectedCo = matchState.companies
+        .where((c) => c.id == selectedId)
+        .firstOrNull;
+    final isInMoveMode = selectedCo != null &&
+        selectedCo.battleId == null &&
+        (selectedCo.destination == null ||
+            selectedCo.destination!.id == selectedCo.currentNode.id);
+    if (!isInMoveMode) return;
+
+    final hit = _hitTestRoad(canvasPoint, matchState);
+    if (hit == null) return;
+
+    ref.read(companyNotifierProvider.notifier).setMidRoadDestination(
+          companyId: selectedId,
+          dest: hit,
+          map: matchState.match.map,
+        );
+  }
+
+  /// Projects [canvasPoint] onto every road edge and returns a [RoadPosition]
+  /// for the closest edge within [_kRoadSnapPixels], or `null` if off-road.
+  RoadPosition? _hitTestRoad(Offset canvasPoint, MatchState matchState) {
+    RoadPosition? best;
+    double bestDist = double.infinity;
+
+    // Deduplicate: only test each undirected segment once.
+    final seen = <String>{};
+
+    for (final edge in matchState.match.map.edges) {
+      final key1 = '${edge.from.id}__${edge.to.id}';
+      final key2 = '${edge.to.id}__${edge.from.id}';
+      if (seen.contains(key2)) continue; // already processed reverse
+      seen.add(key1);
+
+      final (ax, ay) = _nodeCanvasPos(edge.from);
+      final (bx, by) = _nodeCanvasPos(edge.to);
+
+      // Parameterise the segment: p = a + t*(b-a), t in [0,1].
+      final abx = bx - ax;
+      final aby = by - ay;
+      final lenSq = abx * abx + aby * aby;
+      if (lenSq == 0) continue; // degenerate edge
+
+      // t = dot(ap, ab) / |ab|^2
+      final apx = canvasPoint.dx - ax;
+      final apy = canvasPoint.dy - ay;
+      final t = ((apx * abx + apy * aby) / lenSq).clamp(0.0, 1.0);
+
+      // Closest point on segment.
+      final px = ax + t * abx;
+      final py = ay + t * aby;
+
+      final dist = ((canvasPoint.dx - px) * (canvasPoint.dx - px) +
+              (canvasPoint.dy - py) * (canvasPoint.dy - py))
+          .abs();
+
+      if (dist < bestDist) {
+        bestDist = dist;
+
+        // Map t [0,1] to progress [0,1). progress = 1.0 means arrival at `to`,
+        // so cap at just below 1.0 to keep it in the valid range.
+        // If t is effectively 0 or 1 snap to the node instead (handled by
+        // node hit-test above), but still produce a valid progress here.
+        final progress = (t < 1.0 ? t : 0.9999).clamp(0.0, 0.9999);
+
+        best = RoadPosition(
+          currentNodeId: edge.from.id,
+          progress: progress,
+          nextNodeId: edge.to.id,
+        );
+      }
+    }
+
+    if (bestDist <= _kRoadSnapPixels * _kRoadSnapPixels) return best;
+    return null;
+  }
 
   void _onCompanyTap(
     BuildContext context,

@@ -10,6 +10,7 @@ import 'package:iron_and_stone/domain/entities/unit_role.dart';
 import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/use_cases/move_company.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -49,6 +50,7 @@ CompanyOnMap _makeCompany({
   MapNode? destination,
   double progress = 0.0,
   int warriors = 5,
+  String? battleId,
 }) {
   return CompanyOnMap(
     company: Company(composition: {UnitRole.warrior: warriors}),
@@ -57,6 +59,7 @@ CompanyOnMap _makeCompany({
     currentNode: currentNode ?? _playerCastle,
     destination: destination,
     progress: progress,
+    battleId: battleId,
   );
 }
 
@@ -267,6 +270,76 @@ void main() {
         final coWithCheck = resultWithCheck as CompanyOnMap;
         expect(coWithCheck.currentNode.id, equals(resultNormal.currentNode.id));
         expect(coWithCheck.progress, closeTo(resultNormal.progress, 0.001));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // T012 — setMidRoadDestination (US1)
+    // -------------------------------------------------------------------------
+    group('setMidRoadDestination', () {
+      test(
+          '(a) sets midRoadDestination on company and clears destination',
+          () {
+        // Company marching from playerCastle toward aiCastle (destination set).
+        final company = _makeCompany(
+          currentNode: _playerCastle,
+          destination: _aiCastle,
+          progress: 0.0,
+        );
+        final dest = RoadPosition(
+          currentNodeId: _playerCastle.id,
+          progress: 0.5,
+          nextNodeId: _junction1.id,
+        );
+        final result = useCase.setMidRoadDestination(
+          company: company,
+          dest: dest,
+          map: map,
+        );
+        expect(result.midRoadDestination, equals(dest));
+        expect(result.destination, isNull);
+      });
+
+      test(
+          '(b) throws MoveCompanyException when segment does not exist in map',
+          () {
+        final company = _makeCompany(currentNode: _playerCastle);
+        // This segment ('pc' → 'nonexistent') is not in the map.
+        final dest = RoadPosition(
+          currentNodeId: _playerCastle.id,
+          progress: 0.3,
+          nextNodeId: 'nonexistent',
+        );
+        expect(
+          () => useCase.setMidRoadDestination(
+            company: company,
+            dest: dest,
+            map: map,
+          ),
+          throwsA(isA<MoveCompanyException>()),
+        );
+      });
+
+      test(
+          '(c) company locked in battle cannot have mid-road destination set',
+          () {
+        final company = _makeCompany(
+          currentNode: _junction1,
+          battleId: 'battle_abc',
+        );
+        final dest = RoadPosition(
+          currentNodeId: _junction1.id,
+          progress: 0.3,
+          nextNodeId: _junction2.id,
+        );
+        expect(
+          () => useCase.setMidRoadDestination(
+            company: company,
+            dest: dest,
+            map: map,
+          ),
+          throwsA(isA<MoveCompanyException>()),
+        );
       });
     });
   });

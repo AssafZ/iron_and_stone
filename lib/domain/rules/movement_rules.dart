@@ -2,15 +2,27 @@ import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
 import 'package:iron_and_stone/domain/entities/map_node.dart';
 import 'package:iron_and_stone/domain/entities/road_edge.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
+
+/// Distance threshold (in map units) within which two friendly companies
+/// trigger the proximity-merge prompt.
+const double kProximityMergeThreshold = 30.0;
 
 /// Result returned by [MovementRules.advancePosition].
 final class MovementPositionResult {
   final MapNode currentNode;
   final double progress;
 
+  /// `true` when the company has just arrived at its [midRoadDest] position.
+  ///
+  /// When this is `true`, [progress] is clamped to `midRoadDest.progress` and
+  /// the caller is responsible for clearing the company's `midRoadDestination`.
+  final bool reachedMidRoad;
+
   const MovementPositionResult({
     required this.currentNode,
     required this.progress,
+    this.reachedMidRoad = false,
   });
 }
 
@@ -46,6 +58,9 @@ abstract final class MovementRules {
   /// - [company]: used to derive [derivedSpeed].
   /// - [map]: used to look up the next node and edge length.
   /// - [tickSeconds]: duration of one tick in seconds.
+  /// - [midRoadDest]: optional mid-road stop point. When provided and the
+  ///   company is on the matching segment, progress is clamped to
+  ///   [midRoadDest.progress] upon arrival and [reachedMidRoad] is set.
   ///
   /// Returns a [MovementPositionResult] with the updated [MapNode] and
   /// fractional [progress].
@@ -56,6 +71,7 @@ abstract final class MovementRules {
     required Company company,
     required GameMap map,
     required double tickSeconds,
+    RoadPosition? midRoadDest,
   }) {
     if (destination == null || destination.id == currentNode.id) {
       return MovementPositionResult(
@@ -78,6 +94,19 @@ abstract final class MovementRules {
 
     final speed = derivedSpeed(company).toDouble();
     final newProgress = progress + (speed * tickSeconds) / edge.length;
+
+    // Mid-road stop: only applies when the company is on the exact segment
+    // described by midRoadDest (same currentNode and nextNode pair).
+    if (midRoadDest != null &&
+        midRoadDest.currentNodeId == currentNode.id &&
+        midRoadDest.nextNodeId == nextNode.id &&
+        newProgress >= midRoadDest.progress) {
+      return MovementPositionResult(
+        currentNode: currentNode,
+        progress: midRoadDest.progress,
+        reachedMidRoad: true,
+      );
+    }
 
     if (newProgress >= 1.0) {
       // Arrived at the next node — reset progress (do not carry over excess

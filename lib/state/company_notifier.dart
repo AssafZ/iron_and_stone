@@ -8,6 +8,7 @@ import 'package:iron_and_stone/domain/use_cases/merge_companies.dart';
 import 'package:iron_and_stone/domain/use_cases/move_company.dart';
 import 'package:iron_and_stone/domain/use_cases/split_company.dart';
 import 'package:iron_and_stone/domain/value_objects/node_occupancy.dart';
+import 'package:iron_and_stone/domain/value_objects/road_position.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
 
 /// State for the company list + current selection.
@@ -178,6 +179,52 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
       nodeOccupancy: updatedOcc,
     ));
 
+    ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
+  }
+
+  /// Assign a mid-road fractional stop to a Company.
+  ///
+  /// The company will march to the exact fractional position described by
+  /// [dest] and stop there. Delegates to [MoveCompany.setMidRoadDestination].
+  Future<void> setMidRoadDestination({
+    required String companyId,
+    required RoadPosition dest,
+    required GameMap map,
+  }) async {
+    final matchState = ref.read(matchNotifierProvider).valueOrNull;
+    final authoritativeList = matchState?.companies ?? [];
+    final current = state.valueOrNull ?? const CompanyListState();
+
+    final sourceList = authoritativeList.isNotEmpty ? authoritativeList : current.companies;
+    final idx = sourceList.indexWhere((c) => c.id == companyId);
+    if (idx < 0) return;
+
+    final company = sourceList[idx];
+    if (company.battleId != null) return;
+
+    final updated = const MoveCompany().setMidRoadDestination(
+      company: company,
+      dest: dest,
+      map: map,
+    );
+
+    final newList = List<CompanyOnMap>.from(sourceList)..[idx] = updated;
+
+    // If the company was stationary, remove it from its node's occupancy slot.
+    var updatedOcc = current.nodeOccupancy;
+    if (_isStationary(company)) {
+      final nodeId = company.currentNode.id;
+      final existingOcc = updatedOcc[nodeId];
+      if (existingOcc != null) {
+        updatedOcc = Map<String, NodeOccupancy>.from(updatedOcc)
+          ..[nodeId] = existingOcc.withDeparture(companyId);
+      }
+    }
+
+    state = AsyncData(current.copyWith(
+      companies: newList,
+      nodeOccupancy: updatedOcc,
+    ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(newList);
   }
 
