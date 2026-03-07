@@ -36,6 +36,11 @@ typedef SideHp = Map<String, int>;
 ///
 /// HP is tracked per-unit across rounds via [attackerHp] and [defenderHp].
 /// If null, the engine initialises HP from [UnitRole.hp] on round 1.
+///
+/// [initialAttackers] and [initialDefenders] capture the starting compositions
+/// at round 0 (before any fighting). They are set once at creation time and
+/// preserved unchanged through [copyWith] — used by the battle summary screen
+/// to display initial vs. final troop counts per role.
 final class Battle {
   final List<Company> attackers;
   final List<Company> defenders;
@@ -61,6 +66,16 @@ final class Battle {
   /// Per-unit remaining HP for the defending side.
   final SideHp? defenderHp;
 
+  /// The attacker companies as they were at the very start of the battle
+  /// (round 0, before any fighting). Preserved through [copyWith].
+  /// Null only for battles created before this field was introduced.
+  final List<Company>? initialAttackers;
+
+  /// The defender companies as they were at the very start of the battle
+  /// (round 0, before any fighting). Preserved through [copyWith].
+  /// Null only for battles created before this field was introduced.
+  final List<Company>? initialDefenders;
+
   Battle({
     required List<Company> attackers,
     required List<Company> defenders,
@@ -71,9 +86,15 @@ final class Battle {
     this.kind = BattleKind.roadCollision,
     this.attackerHp,
     this.defenderHp,
+    List<Company>? initialAttackers,
+    List<Company>? initialDefenders,
   })  : attackers = List.unmodifiable(attackers),
         defenders = List.unmodifiable(defenders),
-        roundLog = List.unmodifiable(roundLog ?? const []) {
+        roundLog = List.unmodifiable(roundLog ?? const []),
+        initialAttackers =
+            initialAttackers != null ? List.unmodifiable(initialAttackers) : null,
+        initialDefenders =
+            initialDefenders != null ? List.unmodifiable(initialDefenders) : null {
     if (attackers.isEmpty) {
       throw ArgumentError('Battle must have at least one attacker Company.');
     }
@@ -83,6 +104,9 @@ final class Battle {
   }
 
   /// Returns a new [Battle] with updated fields.
+  ///
+  /// [initialAttackers] and [initialDefenders] are intentionally NOT
+  /// overridable here — they must stay fixed after construction.
   Battle copyWith({
     List<Company>? attackers,
     List<Company>? defenders,
@@ -104,6 +128,9 @@ final class Battle {
       kind: kind ?? this.kind,
       attackerHp: attackerHp ?? this.attackerHp,
       defenderHp: defenderHp ?? this.defenderHp,
+      // Always carry forward the initial snapshot unchanged.
+      initialAttackers: initialAttackers,
+      initialDefenders: initialDefenders,
     );
   }
 

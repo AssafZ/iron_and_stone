@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
+import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map.dart';
@@ -64,6 +66,7 @@ void main() {
           match: match,
           castles: [castle],
           companies: [],
+          activeBattles: const [],
         );
 
         final updatedCastle = result.castles.firstWhere((c) => c.id == castle.id);
@@ -103,6 +106,7 @@ void main() {
           match: match,
           castles: [],
           companies: [company],
+          activeBattles: const [],
         );
 
         final updated = result.companies.first;
@@ -128,6 +132,7 @@ void main() {
           match: match,
           castles: [],
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.battleTriggers, isA<List<BattleTrigger>>());
@@ -148,6 +153,7 @@ void main() {
           match: match,
           castles: [],
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.castles, isA<List<Castle>>());
@@ -166,6 +172,7 @@ void main() {
           match: match,
           castles: [],
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.companies, isA<List<CompanyOnMap>>());
@@ -191,6 +198,7 @@ void main() {
           match: match,
           castles: castles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.matchOutcome, isNull);
@@ -216,6 +224,7 @@ void main() {
           match: match,
           castles: castles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.matchOutcome, equals(MatchOutcome.playerWins));
@@ -257,6 +266,7 @@ void main() {
             match: match,
             castles: [castle],
             companies: companies,
+            activeBattles: const [],
           );
           companies = result.companies;
         }
@@ -284,6 +294,7 @@ void main() {
           match: match,
           castles: [castle],
           companies: [],
+          activeBattles: const [],
         );
 
         final updated = result.castles.firstWhere((c) => c.id == castle.id);
@@ -322,6 +333,7 @@ void main() {
             match: match,
             castles: castles,
             companies: companies,
+            activeBattles: const [],
           );
           companies = result.companies;
         }
@@ -375,6 +387,7 @@ void main() {
           match: match,
           castles: [playerCastle, aiCastle],
           companies: [],
+          activeBattles: const [],
         );
 
         // No new companies deployed from garrison — garrison is unused.
@@ -423,6 +436,7 @@ void main() {
           match: match,
           castles: [playerCastle, aiCastle],
           companies: [aiCompany],
+          activeBattles: const [],
         );
 
         final updated = result.companies
@@ -470,6 +484,7 @@ void main() {
           match: match,
           castles: [playerCastle, aiCastle],
           companies: [aiCompany],
+          activeBattles: const [],
         );
 
         final aiAfterTick1 = tick1.companies
@@ -516,6 +531,7 @@ void main() {
           match: match,
           castles: allPlayerCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         // TickMatch delegates to VictoryChecker; both must agree.
@@ -548,6 +564,7 @@ void main() {
           match: match,
           castles: allAiCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         final checkerOutcome = const VictoryChecker().check(allAiCastles);
@@ -580,6 +597,7 @@ void main() {
           match: match,
           castles: mixedCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         final checkerOutcome = const VictoryChecker().check(mixedCastles);
@@ -593,7 +611,7 @@ void main() {
     // -------------------------------------------------------------------------
     group('stationed company reinforcement', () {
       // Helper: build a minimal map with one player castle node.
-      GameMap _singleCastleMap() {
+      GameMap singleCastleMap() {
         const castle = CastleNode(
           id: 'pc',
           x: 0.0,
@@ -610,13 +628,13 @@ void main() {
         );
       }
 
-      Match _match(GameMap map) => Match(
+      Match makeMatch(GameMap map) => Match(
             map: map,
             humanPlayer: Ownership.player,
             phase: MatchPhase.playing,
           );
 
-      Castle _castle({
+      Castle makeCastle({
         required String id,
         Map<UnitRole, int> garrison = const {},
         int peasants = 0,
@@ -626,7 +644,7 @@ void main() {
         return Castle(id: id, ownership: Ownership.player, garrison: g);
       }
 
-      CompanyOnMap _stationedCompany({
+      CompanyOnMap stationedCompany({
         required CastleNode node,
         required Map<UnitRole, int> composition,
         String id = 'co1',
@@ -644,7 +662,7 @@ void main() {
       // Requirement 1: growth only at a castle
       // -----------------------------------------------------------------------
       test('Req-1: company NOT at a castle does not grow', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         const junction = RoadJunctionNode(id: 'j1', x: 100.0, y: 0.0);
         final co = CompanyOnMap(
           id: 'co1',
@@ -654,15 +672,16 @@ void main() {
           progress: 0.0,
           company: Company(composition: {UnitRole.warrior: 5}),
         );
-        final castle = _castle(
+        final castle = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 20},
         );
 
         final result = const TickMatch().tick(
-          match: _match(map),
+          match: makeMatch(map),
           castles: [castle],
           companies: [co],
+          activeBattles: const [],
         );
 
         final updated = result.companies.first;
@@ -673,7 +692,7 @@ void main() {
       // Requirement 1b: marching company does not grow
       // -----------------------------------------------------------------------
       test('Req-1b: company with a destination (marching) does not grow', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
         final junctionNode = map.nodes.whereType<RoadJunctionNode>().first;
         final co = CompanyOnMap(
@@ -684,15 +703,16 @@ void main() {
           progress: 0.0,
           company: Company(composition: {UnitRole.warrior: 5}),
         );
-        final castle = _castle(
+        final castle = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 20},
         );
 
         final result = const TickMatch().tick(
-          match: _match(map),
+          match: makeMatch(map),
           castles: [castle],
           companies: [co],
+          activeBattles: const [],
         );
 
         // The company may have moved (progress/node changed) but soldiers
@@ -705,21 +725,22 @@ void main() {
       // Requirement 2: company capped at 50 soldiers
       // -----------------------------------------------------------------------
       test('Req-2: company at 50 soldiers does not grow beyond 50', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
-        final co = _stationedCompany(
+        final co = stationedCompany(
           node: castleNode,
           composition: {UnitRole.warrior: 50}, // already full
         );
-        final castle = _castle(
+        final castle = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 20},
         );
 
         final result = const TickMatch().tick(
-          match: _match(map),
+          match: makeMatch(map),
           castles: [castle],
           companies: [co],
+          activeBattles: const [],
         );
 
         expect(result.companies.first.company.totalSoldiers.value, equals(50));
@@ -729,17 +750,17 @@ void main() {
       // Requirement 3: only roles already present in the company grow
       // -----------------------------------------------------------------------
       test('Req-3: roles with 0 soldiers in the company do not grow', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
-        final match = _match(map);
+        final match = makeMatch(map);
         // Company has only warriors; garrison also has archers.
         var companies = [
-          _stationedCompany(
+          stationedCompany(
             node: castleNode,
             composition: {UnitRole.warrior: 5},
           ),
         ];
-        final castle = _castle(
+        final castle = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 20, UnitRole.archer: 20},
         );
@@ -750,6 +771,7 @@ void main() {
             match: match,
             castles: [castle],
             companies: companies,
+            activeBattles: const [],
           );
           companies = result.companies;
         }
@@ -768,7 +790,7 @@ void main() {
       // Requirement 4: castle cap halts all company growth
       // -----------------------------------------------------------------------
       test('Req-4: growth stops when combined company total >= castle effectiveCap', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
 
         // effectiveCap with no peasants = 250. Fill companies to 250 exactly.
@@ -789,15 +811,16 @@ void main() {
           );
         });
         // total stationed = 250 = effectiveCap (no peasants).
-        final castle = _castle(
+        final castle = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 100},
         );
 
         final result = const TickMatch().tick(
-          match: _match(map),
+          match: makeMatch(map),
           castles: [castle],
           companies: companies,
+          activeBattles: const [],
         );
 
         final totalAfter = result.companies
@@ -810,7 +833,7 @@ void main() {
       // Requirement 5: peasants accelerate growth and raise cap
       // -----------------------------------------------------------------------
       test('Req-5: peasants raise effectiveCap so more companies can grow', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
 
         // Without peasants: effectiveCap = 250.
@@ -837,9 +860,10 @@ void main() {
         );
 
         const TickMatch().tick(
-          match: _match(map),
+          match: makeMatch(map),
           castles: [castle],
           companies: companies,
+          activeBattles: const [],
         );
 
         // At least one company should have grown beyond 50 — impossible since
@@ -851,46 +875,48 @@ void main() {
       });
 
       test('Req-5b: peasants increase growth rate — more soldiers transferred per tick', () {
-        final map = _singleCastleMap();
+        final map = singleCastleMap();
         final castleNode = map.nodes.whereType<CastleNode>().first;
 
         // Castle with NO peasants: multiplier = 1.0 → growth = 1 per role
-        final co_noPeasants = _stationedCompany(
+        final coNoPeasants = stationedCompany(
           node: castleNode,
           composition: {UnitRole.warrior: 5},
           id: 'co_np',
         );
-        final castle_noPeasants = _castle(
+        final castleNoPeasants = makeCastle(
           id: 'pc',
           garrison: {UnitRole.warrior: 50},
         );
 
-        final result_noPeasants = const TickMatch().tick(
-          match: _match(map),
-          castles: [castle_noPeasants],
-          companies: [co_noPeasants],
+        final resultNoPeasants = const TickMatch().tick(
+          match: makeMatch(map),
+          castles: [castleNoPeasants],
+          companies: [coNoPeasants],
+          activeBattles: const [],
         );
-        final growthNoPeasants = result_noPeasants.companies.first.company.totalSoldiers.value - 5;
+        final growthNoPeasants = resultNoPeasants.companies.first.company.totalSoldiers.value - 5;
 
         // Castle with 20 peasants: multiplier = 2.0 → growth = 2 per role
-        final co_withPeasants = _stationedCompany(
+        final coWithPeasants = stationedCompany(
           node: castleNode,
           composition: {UnitRole.warrior: 5},
           id: 'co_wp',
         );
-        final castle_withPeasants = Castle(
+        final castleWithPeasants = Castle(
           id: 'pc',
           ownership: Ownership.player,
           garrison: {UnitRole.peasant: 20, UnitRole.warrior: 50},
         );
 
-        final result_withPeasants = const TickMatch().tick(
-          match: _match(map),
-          castles: [castle_withPeasants],
-          companies: [co_withPeasants],
+        final resultWithPeasants = const TickMatch().tick(
+          match: makeMatch(map),
+          castles: [castleWithPeasants],
+          companies: [coWithPeasants],
+          activeBattles: const [],
         );
         final growthWithPeasants =
-            result_withPeasants.companies.first.company.totalSoldiers.value - 5;
+            resultWithPeasants.companies.first.company.totalSoldiers.value - 5;
 
         expect(growthWithPeasants, greaterThanOrEqualTo(growthNoPeasants));
       });
@@ -906,9 +932,9 @@ void main() {
           required int startCount,
           required int ticks,
         }) {
-          final map = _singleCastleMap();
+          final map = singleCastleMap();
           final castleNode = map.nodes.whereType<CastleNode>().first;
-          final match = _match(map);
+          final match = makeMatch(map);
           // No peasants → multiplier = 1.0 exactly.
           final castle = Castle(
             id: 'pc',
@@ -932,6 +958,7 @@ void main() {
               match: match,
               castles: [castle],
               companies: companies,
+              activeBattles: const [],
             );
             companies = result.companies;
           }
@@ -1038,9 +1065,9 @@ void main() {
         });
 
         test('Mixed company: peasants grow faster than catapults', () {
-          final map = _singleCastleMap();
+          final map = singleCastleMap();
           final castleNode = map.nodes.whereType<CastleNode>().first;
-          final match = _match(map);
+          final match = makeMatch(map);
           final castle = Castle(
             id: 'pc',
             ownership: Ownership.player,
@@ -1067,6 +1094,7 @@ void main() {
               match: match,
               castles: [castle],
               companies: companies,
+              activeBattles: const [],
             );
             companies = result.companies;
           }
@@ -1084,5 +1112,1188 @@ void main() {
         });
       });
     });
+
+    // =========================================================================
+    // Phase 3 — User Story 1: Road-Junction Collision Triggers a Battle
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // T011: mid-edge pass-through clamp — company clamped when enemy at next node
+    // -------------------------------------------------------------------------
+    group('T011: in-battle company position does not advance', () {
+      test(
+        'T011: a company with battleId != null does NOT advance its position on tick',
+        () {
+          // 3-node map: playerCastle ←→ junction ←→ aiCastle
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const junction =
+              RoadJunctionNode(id: 'jn', x: 100.0, y: 0.0);
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, junction, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: junction, length: 100.0),
+              RoadEdge(from: junction, to: playerCastle, length: 100.0),
+              RoadEdge(from: junction, to: aiCastle, length: 100.0),
+              RoadEdge(from: aiCastle, to: junction, length: 100.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Player company at junction, marching toward aiCastle, FROZEN in battle
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: junction,
+            destination: aiCastle,
+            progress: 0.5,
+            battleId: 'battle_jn', // frozen in battle
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo],
+            activeBattles: const [],
+          );
+
+          final updated =
+              result.companies.firstWhere((c) => c.id == 'p1');
+          // Frozen company must not advance its progress or node
+          expect(updated.currentNode.id, equals('jn'));
+          expect(updated.progress, equals(0.5));
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T012: tick() creates ActiveBattle and freezes both companies on roadCollision
+    // -------------------------------------------------------------------------
+    group('T012: roadCollision trigger creates ActiveBattle and assigns battleId', () {
+      test(
+        'T012: after tick with two opposing companies at same node, '
+        'result.activeBattles has one entry and both companies have battleId set',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const junction = RoadJunctionNode(id: 'jn', x: 100.0, y: 0.0);
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, junction, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: junction, length: 100.0),
+              RoadEdge(from: junction, to: playerCastle, length: 100.0),
+              RoadEdge(from: junction, to: aiCastle, length: 100.0),
+              RoadEdge(from: aiCastle, to: junction, length: 100.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Both companies at the junction — enemy collision
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: junction,
+            destination: aiCastle,
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: junction,
+            destination: playerCastle,
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: const [],
+          );
+
+          // One active battle must be created
+          expect(result.activeBattles, hasLength(1));
+          expect(result.activeBattles.first.id, equals('battle_jn'));
+
+          // Both companies must have battleId set
+          final p = result.companies.firstWhere((c) => c.id == 'p1');
+          final ai = result.companies.firstWhere((c) => c.id == 'ai1');
+          expect(p.battleId, equals('battle_jn'));
+          expect(ai.battleId, equals('battle_jn'));
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T013: tick() carries an existing ActiveBattle forward unchanged
+    //
+    // Battles are NOT auto-advanced by the game-loop tick.  They are advanced
+    // exclusively by MatchNotifier.advanceBattleRound() ("Next Round" button).
+    // -------------------------------------------------------------------------
+    group('T013: existing ActiveBattle is carried forward unchanged by tick', () {
+      test(
+        'T013: after one tick with an existing active battle, '
+        'roundNumber stays at 0 (battle not auto-advanced)',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          final battle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 10})],
+            defenders: [Company(composition: {UnitRole.warrior: 10})],
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: battle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 10}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 10}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // The battle must still be present and NOT yet advanced
+          final updatedBattle = result.activeBattles
+              .where((b) => b.id == 'battle_pc')
+              .firstOrNull;
+          expect(
+            updatedBattle,
+            isNotNull,
+            reason: 'ActiveBattle must still be present after one tick',
+          );
+          expect(
+            updatedBattle!.battle.roundNumber,
+            equals(battle.roundNumber), // still 0 — not advanced by tick
+            reason: 'tick() must NOT auto-advance battle rounds; '
+                'only advanceBattleRound() does that',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T014: post-battle cleanup when battle.outcome != null
+    // -------------------------------------------------------------------------
+    group('T014: post-battle cleanup when battle resolves', () {
+      test(
+        'T014: when a pre-resolved battle (outcome set) is passed in activeBattles, '
+        'cleanup runs: companies updated, zero-soldier companies removed, '
+        'battleId cleared on survivors, ActiveBattle removed from result',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Pre-resolved battle: attackers win, defenders have 0 HP
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 8})],
+            defenders: [Company(composition: {UnitRole.peasant: 0})],
+            outcome: BattleOutcome.attackersWin,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.peasant: 0}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Resolved battle must be removed from activeBattles
+          expect(
+            result.activeBattles.any((b) => b.id == 'battle_pc'),
+            isFalse,
+            reason: 'Resolved battle must be removed from activeBattles',
+          );
+
+          // Zero-soldier company (ai1) must be eliminated
+          final aiRemains = result.companies.any((c) => c.id == 'ai1');
+          expect(aiRemains, isFalse,
+              reason: 'Zero-soldier company must be eliminated');
+
+          // Surviving company must have battleId cleared
+          final survivor =
+              result.companies.firstWhereOrNull((c) => c.id == 'p1');
+          expect(survivor, isNotNull);
+          expect(survivor!.battleId, isNull,
+              reason: 'battleId must be cleared on surviving company');
+        },
+      );
+    });
+
+    // =========================================================================
+    // Phase 4 — User Story 2: Castle-Entry with Garrison Triggers a Battle
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // T026: empty enemy castle → no battle, ownership transfers immediately
+    // -------------------------------------------------------------------------
+    group('T026: attacking company at empty enemy castle — no battle, ownership transfer', () {
+      test(
+        'T026: player company arrives at empty AI castle → no ActiveBattle created, '
+        'castle ownership transfers to player immediately',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const junction = RoadJunctionNode(id: 'jn', x: 100.0, y: 0.0);
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, junction, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: junction, length: 100.0),
+              RoadEdge(from: junction, to: playerCastle, length: 100.0),
+              RoadEdge(from: junction, to: aiCastle, length: 100.0),
+              RoadEdge(from: aiCastle, to: junction, length: 100.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Player company at the AI castle — no AI garrison companies present
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            destination: null,
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo],
+            activeBattles: const [],
+          );
+
+          // No battle must be created for empty castle
+          expect(
+            result.activeBattles,
+            isEmpty,
+            reason: 'Empty enemy castle must not trigger a battle',
+          );
+
+          // Castle ownership must transfer to player
+          final updatedCastle =
+              result.castles.firstWhereOrNull((c) => c.id == 'ac');
+          expect(updatedCastle, isNotNull);
+          expect(
+            updatedCastle!.ownership,
+            equals(Ownership.player),
+            reason: 'Empty enemy castle must transfer ownership immediately',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T027: castleAssault resolves — attacker win → castle transfers; draw → no transfer
+    // -------------------------------------------------------------------------
+    group('T027: post-castleAssault castle ownership transfer', () {
+      test(
+        'T027a: after castleAssault resolves with attackersWin, '
+        'castle ownership transfers to attacker side',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Pre-resolved castleAssault: player (attackers) win
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 8})],
+            defenders: [Company(composition: {UnitRole.peasant: 0})],
+            outcome: BattleOutcome.attackersWin,
+            kind: BattleKind.castleAssault,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'ac', // battle at AI castle
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player, // player is attacker
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 8}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.peasant: 0}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Castle ownership must transfer to player (attacker)
+          final updatedCastle =
+              result.castles.firstWhereOrNull((c) => c.id == 'ac');
+          expect(updatedCastle, isNotNull);
+          expect(
+            updatedCastle!.ownership,
+            equals(Ownership.player),
+            reason:
+                'After castleAssault with attackersWin, castle must transfer '
+                'to attacker ownership',
+          );
+        },
+      );
+
+      test(
+        'T027b: after castleAssault draw, castle ownership does NOT change (FR-024)',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Pre-resolved castleAssault draw
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.peasant: 0})],
+            defenders: [Company(composition: {UnitRole.peasant: 0})],
+            outcome: BattleOutcome.draw,
+            kind: BattleKind.castleAssault,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'ac',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.peasant: 0}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.peasant: 0}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // On draw, castle must REMAIN AI-owned (FR-024)
+          final updatedCastle =
+              result.castles.firstWhereOrNull((c) => c.id == 'ac');
+          expect(updatedCastle, isNotNull);
+          expect(
+            updatedCastle!.ownership,
+            equals(Ownership.ai),
+            reason:
+                'Castle ownership must NOT change on a battle draw (FR-024)',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T028: reinforcement — company arriving at node where battle already in progress
+    // -------------------------------------------------------------------------
+    group('T028: reinforcement joins ongoing battle at same node', () {
+      test(
+        'T028: a company arriving at a node where a castleAssault is already '
+        'in progress joins the battle as a reinforcement (same battleId assigned)',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc',
+            x: 0.0,
+            y: 0.0,
+            ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac',
+            x: 200.0,
+            y: 0.0,
+            ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Existing battle at ai castle: p1 vs ai1
+          final ongoingBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 5})],
+            defenders: [Company(composition: {UnitRole.warrior: 5})],
+            kind: BattleKind.castleAssault,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'ac',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: ongoingBattle,
+          );
+
+          // p1 already in battle at ac
+          final p1 = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+          // ai1 defender already in battle
+          final ai1 = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+          // p2: new player company arriving at ai castle (reinforcement)
+          final p2 = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 3}),
+            id: 'p2',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            destination: null,
+            // No battleId yet — just arrived
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [p1, ai1, p2],
+            activeBattles: [activeBattle],
+          );
+
+          // p2 must be assigned the same battleId (joined the battle)
+          final updatedP2 =
+              result.companies.firstWhereOrNull((c) => c.id == 'p2');
+          expect(updatedP2, isNotNull);
+          expect(
+            updatedP2!.battleId,
+            equals('battle_ac'),
+            reason:
+                'Reinforcement company arriving at battle node must be '
+                'assigned the existing battleId',
+          );
+
+          // The ActiveBattle must still exist (battle not yet resolved)
+          expect(
+            result.activeBattles.any((b) => b.id == 'battle_ac'),
+            isTrue,
+          );
+        },
+      );
+    });
+
+    // =========================================================================
+    // Phase 4b — User Story 5: Post-Battle State
+    // =========================================================================
+
+    // Shared map helpers for Phase 4b tests
+    // (inline locals to keep tests self-contained)
+
+    // -------------------------------------------------------------------------
+    // T056: after attackersWin, attacker composition updated, 0-soldier companies gone
+    // -------------------------------------------------------------------------
+    group('T056: attacker win → surviving attacker composition updated; 0-soldier removed', () {
+      test(
+        'T056: after battle resolves attackersWin, attacker company composition '
+        'matches final Battle HP counts; zero-soldier defender is removed',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Attacker has 8 warriors remaining in the final battle state
+          final finalAttacker = Company(composition: {UnitRole.warrior: 8});
+          final resolvedBattle = Battle(
+            attackers: [finalAttacker],
+            defenders: [Company(composition: {UnitRole.warrior: 0})],
+            outcome: BattleOutcome.attackersWin,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}), // old count
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 3}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Attacker survivor must have updated composition (8 warriors from final battle)
+          final survivor = result.companies.firstWhereOrNull((c) => c.id == 'p1');
+          expect(survivor, isNotNull, reason: 'Attacker must survive attackersWin');
+          expect(
+            survivor!.company.composition[UnitRole.warrior],
+            equals(8),
+            reason:
+                'Survivor composition must match final Battle attacker HP counts',
+          );
+
+          // Zero-soldier defender must be removed
+          expect(
+            result.companies.any((c) => c.id == 'ai1'),
+            isFalse,
+            reason: 'Zero-soldier company must be removed after battle',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T057: after defendersWin, defender composition updated, attackers removed
+    // -------------------------------------------------------------------------
+    group('T057: defender win → defender composition updated; attacker companies removed', () {
+      test(
+        'T057: after battle resolves defendersWin, defender composition matches '
+        'final Battle HP; zero-soldier attacker is removed',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Defender has 6 archers remaining in the final battle state
+          final finalDefender = Company(composition: {UnitRole.archer: 6});
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 0})],
+            defenders: [finalDefender],
+            outcome: BattleOutcome.defendersWin,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 3}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.archer: 4}), // old count
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Defender survivor must have updated composition (6 archers from final battle)
+          final defender = result.companies.firstWhereOrNull((c) => c.id == 'ai1');
+          expect(defender, isNotNull, reason: 'Defender must survive defendersWin');
+          expect(
+            defender!.company.composition[UnitRole.archer],
+            equals(6),
+            reason:
+                'Defender composition must match final Battle defender HP counts',
+          );
+
+          // Zero-soldier attacker must be removed
+          expect(
+            result.companies.any((c) => c.id == 'p1'),
+            isFalse,
+            reason: 'Zero-soldier attacker must be removed after battle',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T058: draw — both sides removed
+    // -------------------------------------------------------------------------
+    group('T058: draw → both sides removed from result', () {
+      test(
+        'T058: when battle outcome is draw, ALL companies on both sides are removed',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Draw: both sides reach 0 soldiers
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 0})],
+            defenders: [Company(composition: {UnitRole.warrior: 0})],
+            outcome: BattleOutcome.draw,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 1}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 1}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Both companies must be removed on draw
+          expect(
+            result.companies.any((c) => c.id == 'p1' || c.id == 'ai1'),
+            isFalse,
+            reason: 'On draw, both sides must be eliminated',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T059: castleAssault draw → castle ownership unchanged (FR-024)
+    // -------------------------------------------------------------------------
+    group('T059: castleAssault draw → castle ownership unchanged', () {
+      test(
+        'T059: after castleAssault resolves with draw, castle ownership '
+        'does NOT change (FR-024)',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 0})],
+            defenders: [Company(composition: {UnitRole.warrior: 0})],
+            outcome: BattleOutcome.draw,
+            kind: BattleKind.castleAssault,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'ac',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 1}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 1}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: aiCastle,
+            battleId: 'battle_ac',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          // Castle must remain AI-owned after draw
+          final updatedCastle = result.castles.firstWhereOrNull((c) => c.id == 'ac');
+          expect(updatedCastle, isNotNull);
+          expect(
+            updatedCastle!.ownership,
+            equals(Ownership.ai),
+            reason: 'Castle ownership must not change on draw (FR-024)',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T060: survivor battleId cleared, destination preserved after cleanup
+    // -------------------------------------------------------------------------
+    group('T060: survivor battleId cleared and destination preserved after cleanup', () {
+      test(
+        'T060: after battle cleanup, surviving company has battleId == null '
+        'and its destination is preserved unchanged',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          final resolvedBattle = Battle(
+            attackers: [Company(composition: {UnitRole.warrior: 8})],
+            defenders: [Company(composition: {UnitRole.warrior: 0})],
+            outcome: BattleOutcome.attackersWin,
+          );
+          final activeBattle = ActiveBattle(
+            nodeId: 'pc',
+            attackerCompanyIds: ['p1'],
+            defenderCompanyIds: ['ai1'],
+            attackerOwnership: Ownership.player,
+            battle: resolvedBattle,
+          );
+
+          // Survivor has a destination set (marching was interrupted by battle)
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            destination: aiCastle, // destination should be preserved
+            battleId: 'battle_pc',
+          );
+          final aiCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 0}),
+            id: 'ai1',
+            ownership: Ownership.ai,
+            currentNode: playerCastle,
+            battleId: 'battle_pc',
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo, aiCo],
+            activeBattles: [activeBattle],
+          );
+
+          final survivor = result.companies.firstWhereOrNull((c) => c.id == 'p1');
+          expect(survivor, isNotNull);
+          // battleId must be cleared
+          expect(
+            survivor!.battleId,
+            isNull,
+            reason: 'battleId must be cleared on survivor after cleanup',
+          );
+          // destination must be preserved (resume marching)
+          expect(
+            survivor.destination?.id,
+            equals(aiCastle.id),
+            reason: 'Survivor destination must be preserved after battle cleanup',
+          );
+        },
+      );
+    });
+
+    // -------------------------------------------------------------------------
+    // T062: survivor with destination == currentNode stays stationary, no re-collision
+    // -------------------------------------------------------------------------
+    group('T062: survivor destination == currentNode stays stationary, no phantom collision', () {
+      test(
+        'T062: after cleanup, a company whose destination equals its currentNode '
+        'remains stationary and does NOT trigger a collision on the next tick',
+        () {
+          const playerCastle = CastleNode(
+            id: 'pc', x: 0.0, y: 0.0, ownership: Ownership.player,
+          );
+          const aiCastle = CastleNode(
+            id: 'ac', x: 200.0, y: 0.0, ownership: Ownership.ai,
+          );
+          final map = GameMap(
+            nodes: [playerCastle, aiCastle],
+            edges: [
+              RoadEdge(from: playerCastle, to: aiCastle, length: 200.0),
+              RoadEdge(from: aiCastle, to: playerCastle, length: 200.0),
+            ],
+          );
+          final match = Match(
+            map: map,
+            humanPlayer: Ownership.player,
+            phase: MatchPhase.playing,
+          );
+
+          // Player company at pc; destination == currentNode (arrived at destination)
+          final playerCo = CompanyOnMap(
+            company: Company(composition: {UnitRole.warrior: 5}),
+            id: 'p1',
+            ownership: Ownership.player,
+            currentNode: playerCastle,
+            destination: playerCastle, // destination == currentNode → stationary
+          );
+
+          final result = const TickMatch().tick(
+            match: match,
+            castles: [
+              Castle(id: 'pc', ownership: Ownership.player, garrison: {}),
+              Castle(id: 'ac', ownership: Ownership.ai, garrison: {}),
+            ],
+            companies: [playerCo],
+            activeBattles: const [],
+          );
+
+          // Company must not advance (stays at pc)
+          final updated = result.companies.firstWhereOrNull((c) => c.id == 'p1');
+          expect(updated, isNotNull);
+          expect(
+            updated!.currentNode.id,
+            equals('pc'),
+            reason: 'Company with destination == currentNode must stay stationary',
+          );
+          // No spurious collision triggers
+          expect(
+            result.battleTriggers,
+            isEmpty,
+            reason: 'Stationary company must not trigger phantom collisions',
+          );
+        },
+      );
+    });
   });
+}
+
+// ignore: avoid_classes_with_only_static_members
+extension _IterableExt<T> on Iterable<T> {
+  T? get firstOrNull {
+    final it = iterator;
+    return it.moveNext() ? it.current : null;
+  }
+
+  T? firstWhereOrNull(bool Function(T) test) {
+    for (final e in this) {
+      if (test(e)) return e;
+    }
+    return null;
+  }
 }

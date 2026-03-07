@@ -246,5 +246,95 @@ void main() {
         expect(result.roundDamageToDefenders, greaterThan(0));
       });
     });
+
+    group('resolveRound — multi-company side (>50 soldiers)', () {
+      // Regression test for bug: _companiesFromHp merged all survivors into one
+      // Company, crashing with SoldierCount > 50 when both defender companies
+      // together had more than 50 soldiers.
+      test('castle assault with 11 attackers vs 72 defenders (two companies) '
+          'does not throw and resolves correctly', () {
+        // Exact user-reported scenario: 11 warrior attackers vs two defender
+        // companies totalling 72 warriors at a castle.
+        final attackers = [company(UnitRole.warrior, 11)];
+        final defenders = [
+          company(UnitRole.warrior, 50), // first garrison company (cap 50)
+          company(UnitRole.warrior, 22), // second garrison company
+        ];
+        final battle = Battle(
+          attackers: attackers,
+          defenders: defenders,
+          kind: BattleKind.castleAssault,
+        );
+
+        final engine = const BattleEngine();
+
+        // Must not throw — previously crashed with SoldierCount(61) > 50
+        expect(() => engine.resolveRound(battle), returnsNormally);
+
+        final result = engine.resolveRound(battle);
+
+        // 11 warriors × 15 dmg = 165 dmg to defenders
+        // 72 warriors × 15 dmg = 1080 dmg to attackers (11 × 50 HP = 550 total)
+        // → Attackers wiped out in round 1, defenders win
+        expect(result.updatedBattle.outcome, equals(BattleOutcome.defendersWin));
+        expect(result.updatedBattle.roundNumber, equals(1));
+      });
+
+      test('survivors from a >50-soldier side are split across multiple Companies '
+          'each respecting the 50-soldier cap', () {
+        // 1 attacker vs 72 defenders — defenders survive with large forces
+        final attackers = [company(UnitRole.warrior, 1)]; // 1×15=15 dmg
+        final defenders = [
+          company(UnitRole.warrior, 50),
+          company(UnitRole.warrior, 22),
+        ];
+        final battle = Battle(
+          attackers: attackers,
+          defenders: defenders,
+          kind: BattleKind.castleAssault,
+        );
+
+        final engine = const BattleEngine();
+        final result = engine.resolveRound(battle);
+
+        // 1 warrior = 15 dmg → kills 0 defenders (each has 50 HP, 15 < 50)
+        // so 72 defenders survive across multiple companies
+        final survivingDefenders = result.updatedBattle.defenders;
+        for (final co in survivingDefenders) {
+          expect(co.totalSoldiers.value, lessThanOrEqualTo(50),
+              reason: 'Each Company must have ≤ 50 soldiers');
+        }
+        final totalSurvivors = survivingDefenders.fold(
+            0, (s, co) => s + co.totalSoldiers.value);
+        expect(totalSurvivors, equals(72)); // no defenders lost (15 dmg < 50 hp each)
+      });
+
+      test('multi-round battle with >50-soldier side progresses through all rounds', () {
+        // Enough attackers to need multiple rounds to eliminate 72 defenders
+        final attackers = [company(UnitRole.warrior, 50)];
+        final defenders = [
+          company(UnitRole.warrior, 50),
+          company(UnitRole.warrior, 22),
+        ];
+        final battle = Battle(
+          attackers: attackers,
+          defenders: defenders,
+          kind: BattleKind.castleAssault,
+        );
+
+        final engine = const BattleEngine();
+        var current = battle;
+
+        // Advance rounds until resolved — must not throw at any round
+        var rounds = 0;
+        while (current.outcome == null && rounds < 20) {
+          expect(() => engine.resolveRound(current), returnsNormally);
+          current = engine.resolveRound(current).updatedBattle;
+          rounds++;
+        }
+        expect(current.outcome, isNotNull,
+            reason: 'Battle must resolve within 20 rounds');
+      });
+    });
   });
 }

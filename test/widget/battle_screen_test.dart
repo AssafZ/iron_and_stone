@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
 import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
+import 'package:iron_and_stone/domain/entities/match.dart';
 import 'package:iron_and_stone/domain/entities/unit_role.dart';
+import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/battle_notifier.dart';
+import 'package:iron_and_stone/state/match_notifier.dart';
 import 'package:iron_and_stone/ui/screens/battle_screen.dart';
 
 void main() {
@@ -227,4 +231,411 @@ void main() {
       expect(find.text('Return to Map'), findsOneWidget);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // T040 / T041 / T042 / T043 — battleId-based BattleScreen via matchNotifierProvider
+  // ---------------------------------------------------------------------------
+
+  group('BattleScreen (battleId path)', () {
+    // Build an ActiveBattle with known company compositions.
+    ActiveBattle buildActiveBattle({
+      String nodeId = 'j1',
+      int attackerWarriors = 8,
+      int defenderKnights = 5,
+    }) {
+      final attackerCo = Company(composition: {UnitRole.warrior: attackerWarriors});
+      final defenderCo = Company(composition: {UnitRole.knight: defenderKnights});
+      return ActiveBattle(
+        nodeId: nodeId,
+        attackerCompanyIds: const ['player_co0'],
+        defenderCompanyIds: const ['ai_co0'],
+        attackerOwnership: Ownership.player,
+        battle: Battle(attackers: [attackerCo], defenders: [defenderCo]),
+      );
+    }
+
+    // T040 — BattleScreen(battleId:) shows attackers and defenders for that battle
+    testWidgets(
+        'T040: shows correct attacker and defender companies for a given battleId',
+        (tester) async {
+      final ab = buildActiveBattle(attackerWarriors: 8, defenderKnights: 5);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(
+              () => _BattleScreenFakeMatchNotifier(activeBattle: ab),
+            ),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Both side labels must appear.
+      expect(find.text('Attackers'), findsOneWidget);
+      expect(find.text('Defenders'), findsOneWidget);
+      // HP bars must be present for each side.
+      expect(find.byKey(const Key('hp_bar')), findsWidgets);
+      // "Next Round" button present.
+      expect(find.text('Next Round'), findsOneWidget);
+    });
+
+    // T041 — tapping "Next Round" calls matchNotifier.advanceBattleRound(battleId)
+    testWidgets(
+        'T041: tapping Next Round calls advanceBattleRound with the correct battleId',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _TrackingMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Next Round'));
+      await tester.pump();
+
+      expect(notifier.advancedBattleId, equals(ab.id));
+    });
+
+    // T042 — BattleScreen shows _BattleSummary when battle is resolved (gone from activeBattles)
+    testWidgets(
+        'T042: shows summary when ActiveBattle for battleId is gone from MatchState',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Battle is active — Next Round button present.
+      expect(find.text('Next Round'), findsOneWidget);
+
+      // Simulate battle resolution (removed from activeBattles, outcome set).
+      notifier.resolveBattle();
+      await tester.pump();
+
+      // Summary screen must appear — shows outcome text or "Return to Map".
+      expect(find.text('Return to Map'), findsOneWidget);
+    });
+
+    // T042b — summary shows the correct outcome text from resolvedBattles
+    testWidgets(
+        'T042b: summary shows "Victory" when outcome is attackersWin',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.attackersWin);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Victory', findRichText: true),
+        findsAny,
+        reason: 'Expected "Victory" for attackersWin',
+      );
+    });
+
+    testWidgets(
+        'T042b-defeat: summary shows "Defeat" when outcome is defendersWin',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.defendersWin);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Defeat', findRichText: true),
+        findsAny,
+        reason: 'Expected "Defeat" for defendersWin',
+      );
+    });
+
+    testWidgets(
+        'T042b-draw: summary shows "Draw" when outcome is draw',
+        (tester) async {
+      final ab = buildActiveBattle();
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle(outcome: BattleOutcome.draw);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Draw', findRichText: true),
+        findsAny,
+        reason: 'Expected "Draw" for draw',
+      );
+    });
+
+    // T042c — summary shows troop breakdown columns for both sides
+    testWidgets(
+        'T042c: summary shows Attackers and Defenders columns with troop counts',
+        (tester) async {
+      final ab = buildActiveBattle(attackerWarriors: 8, defenderKnights: 5);
+      final notifier = _ResolvableMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      notifier.resolveBattle();
+      await tester.pump();
+
+      // Both side labels present in summary.
+      expect(find.text('Attackers'), findsOneWidget);
+      expect(find.text('Defenders'), findsOneWidget);
+      // Initial attacker warriors shown as '8'.
+      expect(find.text('8'), findsWidgets);
+      // Initial defender knights shown as '5'.
+      expect(find.text('5'), findsWidgets);
+    });
+
+    // T043 — tapping "Next Round" via the real advanceBattleRound updates the
+    // round number displayed in the AppBar.
+    testWidgets(
+        'T043: tapping Next Round with real advanceBattleRound updates '
+        'round display from "Round 0" to "Round 1"',
+        (tester) async {
+      // Long-lived battle so it won't resolve in one round.
+      final battle = Battle(
+        attackers: [Company(composition: {UnitRole.warrior: 20})],
+        defenders: [Company(composition: {UnitRole.warrior: 20})],
+      );
+      final ab = ActiveBattle(
+        nodeId: 'j1',
+        attackerCompanyIds: const ['p1'],
+        defenderCompanyIds: const ['ai1'],
+        attackerOwnership: Ownership.player,
+        battle: battle,
+      );
+
+      final notifier = _RealAdvanceMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Initially at round 0.
+      expect(find.text('Round 0'), findsOneWidget,
+          reason: 'Battle must start at round 0');
+
+      // Tap "Next Round" — real advanceBattleRound fires.
+      await tester.tap(find.text('Next Round'));
+      await tester.pump();
+      await tester.pump();
+
+      // Round number must have advanced to 1.
+      expect(find.text('Round 1'), findsOneWidget,
+          reason: 'Tapping Next Round must advance display to Round 1');
+    });
+
+    // T043b — tapping "Next Round" twice advances to round 2.
+    testWidgets(
+        'T043b: tapping Next Round twice advances to Round 2',
+        (tester) async {
+      final battle = Battle(
+        attackers: [Company(composition: {UnitRole.warrior: 20})],
+        defenders: [Company(composition: {UnitRole.warrior: 20})],
+      );
+      final ab = ActiveBattle(
+        nodeId: 'j1',
+        attackerCompanyIds: const ['p1'],
+        defenderCompanyIds: const ['ai1'],
+        attackerOwnership: Ownership.player,
+        battle: battle,
+      );
+
+      final notifier = _RealAdvanceMatchNotifier(activeBattle: ab);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            matchNotifierProvider.overrideWith(() => notifier),
+          ],
+          child: MaterialApp(
+            home: BattleScreen(battleId: ab.id),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Tap "Next Round" twice.
+      await tester.tap(find.text('Next Round'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Next Round'));
+      await tester.pump();
+      await tester.pump();
+
+      // Must show Round 2.
+      expect(find.text('Round 2'), findsOneWidget,
+          reason: 'Two taps must advance display to Round 2');
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers for T040 / T041 / T042
+// ---------------------------------------------------------------------------
+
+/// Fake [MatchNotifier] that starts with one [ActiveBattle] injected.
+/// Used by T040 to verify BattleScreen displays the correct companies.
+class _BattleScreenFakeMatchNotifier extends MatchNotifier {
+  final ActiveBattle _ab;
+  _BattleScreenFakeMatchNotifier({required ActiveBattle activeBattle})
+      : _ab = activeBattle;
+
+  @override
+  Future<MatchState> build() async {
+    final base = await super.build();
+    return base.copyWith(activeBattles: [_ab]);
+  }
+}
+
+/// Fake [MatchNotifier] that records which battleId was passed to
+/// [advanceBattleRound]. Used by T041.
+class _TrackingMatchNotifier extends MatchNotifier {
+  final ActiveBattle _ab;
+  String? advancedBattleId;
+
+  _TrackingMatchNotifier({required ActiveBattle activeBattle}) : _ab = activeBattle;
+
+  @override
+  Future<MatchState> build() async {
+    final base = await super.build();
+    return base.copyWith(activeBattles: [_ab]);
+  }
+
+  @override
+  Future<void> advanceBattleRound(String battleId) async {
+    advancedBattleId = battleId;
+    // Don't actually advance — just record the call.
+  }
+}
+
+/// Fake [MatchNotifier] whose battle can be "resolved" post-build.
+/// Used by T042 to simulate the battle disappearing from activeBattles.
+class _ResolvableMatchNotifier extends MatchNotifier {
+  final ActiveBattle _ab;
+
+  _ResolvableMatchNotifier({required ActiveBattle activeBattle})
+      : _ab = activeBattle;
+
+  @override
+  Future<MatchState> build() async {
+    final base = await super.build();
+    return base.copyWith(activeBattles: [_ab]);
+  }
+
+  /// Remove the battle from state, adding a resolved entry with [outcome].
+  ///
+  /// Simulates the post-battle cleanup done by [MatchNotifier.advanceBattleRound].
+  void resolveBattle({BattleOutcome outcome = BattleOutcome.attackersWin}) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final resolvedBattle = _ab.battle.copyWith(outcome: outcome);
+    state = AsyncData(current.copyWith(
+      activeBattles: const [],
+      resolvedBattles: {_ab.id: resolvedBattle},
+    ));
+  }
+}
+
+/// Real [MatchNotifier] that starts with one [ActiveBattle] and uses the
+/// genuine [advanceBattleRound] implementation.  Used by T043 / T043b to
+/// verify that tapping "Next Round" actually updates the round display.
+class _RealAdvanceMatchNotifier extends MatchNotifier {
+  final ActiveBattle _ab;
+  _RealAdvanceMatchNotifier({required ActiveBattle activeBattle})
+      : _ab = activeBattle;
+
+  @override
+  Future<MatchState> build() async {
+    final base = await super.build();
+    return base.copyWith(
+      match: base.match.copyWith(phase: MatchPhase.inBattle),
+      activeBattles: [_ab],
+    );
+  }
 }

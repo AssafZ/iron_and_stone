@@ -60,6 +60,10 @@ final class CompanyOnMap {
   /// and the remainder is kept for the next tick.
   final Map<UnitRole, double> growthRemainder;
 
+  /// ID of the [ActiveBattle] this Company is currently locked into, or null
+  /// when the Company is not in battle.
+  final String? battleId;
+
   const CompanyOnMap({
     required this.company,
     required this.id,
@@ -68,11 +72,16 @@ final class CompanyOnMap {
     this.destination,
     this.progress = 0.0,
     this.growthRemainder = const {},
+    this.battleId,
   });
 
   /// Sentinel used to distinguish "caller passed null explicitly" from
   /// "caller did not pass the argument at all" for the nullable [destination].
   static const Object _destinationSentinel = Object();
+
+  /// Sentinel used to distinguish "caller passed null explicitly" from
+  /// "caller did not pass the argument at all" for the nullable [battleId].
+  static const Object _battleIdSentinel = Object();
 
   CompanyOnMap copyWith({
     Company? company,
@@ -82,6 +91,7 @@ final class CompanyOnMap {
     Object? destination = _destinationSentinel,
     double? progress,
     Map<UnitRole, double>? growthRemainder,
+    Object? battleId = _battleIdSentinel,
   }) {
     return CompanyOnMap(
       company: company ?? this.company,
@@ -93,6 +103,9 @@ final class CompanyOnMap {
           : destination as MapNode?,
       progress: progress ?? this.progress,
       growthRemainder: growthRemainder ?? this.growthRemainder,
+      battleId: identical(battleId, _battleIdSentinel)
+          ? this.battleId
+          : battleId as String?,
     );
   }
 
@@ -104,75 +117,128 @@ final class CompanyOnMap {
 /// Use case: detect battle triggers from the current map state.
 ///
 /// Checks for:
-/// - **FR-014**: Opposing Companies on the same road segment/node → [BattleTriggerKind.roadCollision]
-/// - **FR-015**: A Company arriving at an enemy [CastleNode] → [BattleTriggerKind.castleAssault]
+/// - **FR-001**: Opposing Companies on the same road segment/node → [BattleTriggerKind.roadCollision]
+/// - **FR-003**: A Company arriving at an enemy [CastleNode] that has stationary
+///   garrison companies → [BattleTriggerKind.castleAssault]
+/// - **FR-004**: An enemy castle with no living garrison is captured immediately
+///   (no battle trigger emitted).
 ///
 /// Pure Dart — zero Flutter/state imports.
 final class CheckCollisions {
   const CheckCollisions();
 
   /// Returns a list of [BattleTrigger]s detected among the given [companies].
+  ///
+  /// [castleOwnership] is a map from castle node ID to its **live** ownership.
+  /// This must reflect any ownership transfers that have already happened this
+  /// tick so that a company that just captured a castle is not immediately
+  /// treated as an enemy there again.
+  ///
+  /// Companies already locked in a battle ([CompanyOnMap.battleId] != null) are
+  /// excluded from new-trigger detection — they are already being processed by
+  /// the active battle loop and must not spawn duplicate triggers.
   List<BattleTrigger> check({
     required GameMap map,
     required List<CompanyOnMap> companies,
+    Map<String, Ownership> castleOwnership = const {},
   }) {
     final triggers = <BattleTrigger>[];
 
-    // FR-015: Company at an enemy castle node
-    for (final co in companies) {
+    // Only consider companies that are NOT already in an active battle.
+    // Companies with a battleId are frozen and handled by the battle loop.
+    final freeCompanies = companies.where((c) => c.battleId == null).toList();
+
+    // Helper: resolve live castle ownership (falls back to static CastleNode.ownership).
+    Ownership liveOwnership(CastleNode node) =>
+        castleOwnership[node.id] ?? node.ownership;
+
+    // FR-003: Company arriving at an enemy castle node that has garrison defenders.
+    // Only stationary companies (destination == null OR destination == currentNode)
+    // with at least 1 soldier at the castle count as garrison.
+    for (final co in freeCompanies) {
       final node = co.currentNode;
-      if (node is CastleNode && _isEnemy(co.ownership, node.ownership)) {
+      if (node is! CastleNode) continue;
+      final castleOwner = liveOwnership(node);
+      if (!isEnemy(co.ownership, castleOwner)) continue;
+
+      // Collect garrison defenders: companies at this castle node belonging to
+      // the castle's owner that are stationary and have >= 1 soldier.
+      // Use live castle ownership (castleOwner) not the static node.ownership.
+      final garrisonDefenders = companies.where((c) {
+        if (c.id == co.id) return false;
+        if (c.currentNode.id != node.id) return false;
+        if (c.ownership != castleOwner) return false;
+        final isStationary = c.destination == null || c.destination!.id == c.currentNode.id;
+        if (!isStationary) return false;
+        return c.company.totalSoldiers.value > 0;
+      }).toList();
+
+      if (garrisonDefenders.isEmpty) continue; // empty castle — no battle trigger
+
+      // Emit ONE castleAssault trigger with the attacker + all garrison defenders.
+      // Check we haven't already emitted one for this node (e.g. multiple attackers
+      // arriving simultaneously — they will be grouped into one trigger below).
+      final alreadyEmitted = triggers.any(
+        (t) => t.kind == BattleTriggerKind.castleAssault && t.location.id == node.id,
+      );
+      if (!alreadyEmitted) {
+        final allInvolvedIds = [
+          // All free attackers (enemies of the castle owner) at this node
+          ...freeCompanies
+              .where((c) =>
+                  c.currentNode.id == node.id &&
+                  isEnemy(c.ownership, castleOwner))
+              .map((c) => c.id),
+          // All garrison defenders (may include battling ones already there)
+          ...garrisonDefenders.map((c) => c.id),
+        ];
         triggers.add(
           BattleTrigger(
             kind: BattleTriggerKind.castleAssault,
             location: node,
-            companyIds: [co.id],
+            companyIds: allInvolvedIds.toSet().toList(),
           ),
         );
       }
     }
 
-    // FR-014: Opposing Companies on the same node
-    // Group companies by their current node id
+    // FR-001: Opposing Companies on the same node (non-castle-assault nodes).
+    // Group FREE companies by their current node id (companies in a battle are
+    // already handled by the active battle loop — exclude them here).
     final byNode = <String, List<CompanyOnMap>>{};
-    for (final co in companies) {
+    for (final co in freeCompanies) {
       byNode.putIfAbsent(co.currentNode.id, () => []).add(co);
     }
 
     for (final nodeGroup in byNode.values) {
       if (nodeGroup.length < 2) continue;
 
-      // Find pairs of opposing Companies on this node
-      final opposing = <CompanyOnMap>[];
-      for (int i = 0; i < nodeGroup.length; i++) {
-        for (int j = i + 1; j < nodeGroup.length; j++) {
-          final a = nodeGroup[i];
-          final b = nodeGroup[j];
-          if (_isEnemy(a.ownership, b.ownership)) {
-            opposing.add(a);
-            opposing.add(b);
+      // Determine if any two companies on this node are enemies.
+      bool hasAnyEnemy = false;
+      for (int i = 0; i < nodeGroup.length && !hasAnyEnemy; i++) {
+        for (int j = i + 1; j < nodeGroup.length && !hasAnyEnemy; j++) {
+          if (isEnemy(nodeGroup[i].ownership, nodeGroup[j].ownership)) {
+            hasAnyEnemy = true;
           }
         }
       }
-      if (opposing.isEmpty) continue;
-
-      // Deduplicate by id
-      final seen = <String>{};
-      final unique = opposing.where((c) => seen.add(c.id)).toList();
+      if (!hasAnyEnemy) continue;
 
       final node = nodeGroup.first.currentNode;
-      // Skip if this is already covered by a castleAssault trigger at this node
+      // Skip if this is already covered by a castleAssault trigger at this node.
       final alreadyCastleAssault = triggers.any(
         (t) =>
             t.kind == BattleTriggerKind.castleAssault &&
             t.location.id == node.id,
       );
       if (!alreadyCastleAssault) {
+        // Emit ONE trigger per node containing ALL companies present
+        // (regardless of ownership mix — the battle loop sorts sides out).
         triggers.add(
           BattleTrigger(
             kind: BattleTriggerKind.roadCollision,
             location: node,
-            companyIds: unique.map((c) => c.id).toList(),
+            companyIds: nodeGroup.map((c) => c.id).toList(),
           ),
         );
       }
@@ -181,7 +247,7 @@ final class CheckCollisions {
     return triggers;
   }
 
-  static bool _isEnemy(Ownership a, Ownership b) {
+  static bool isEnemy(Ownership a, Ownership b) {
     if (a == Ownership.neutral || b == Ownership.neutral) return false;
     return a != b;
   }

@@ -84,5 +84,9 @@ final class BattleNotifier extends Notifier<BattleState> {
 }
 
 /// Global provider for the active battle session.
+///
+/// TODO(cleanup): Retained for backward compatibility with the no-battleId
+/// BattleScreen path and existing widget tests. Remove after BattleScreen is
+/// fully migrated to read battle state from matchNotifierProvider.
 final battleNotifierProvider =
     NotifierProvider<BattleNotifier, BattleState>(BattleNotifier.new);

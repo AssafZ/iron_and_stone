@@ -58,6 +58,7 @@ List<Castle> _buildCastles(GameMap map) {
       ),
       castles: currentCastles,
       companies: currentCompanies,
+      activeBattles: const [],
     );
     currentCastles = result.castles;
     currentCompanies = result.companies;
@@ -123,6 +124,7 @@ void main() {
           match: match,
           castles: allPlayerCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         // TickMatch should emit playerWins outcome.
@@ -164,6 +166,7 @@ void main() {
           match: match,
           castles: allPlayerCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(
@@ -196,6 +199,7 @@ void main() {
           match: match,
           castles: allPlayerCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         // Both TickMatch and VictoryChecker agree.
@@ -234,6 +238,7 @@ void main() {
           match: match,
           castles: allAiCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(
@@ -266,6 +271,7 @@ void main() {
           match: match,
           castles: allAiCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         final checkerOutcome = const VictoryChecker().check(allAiCastles);
@@ -294,6 +300,7 @@ void main() {
           match: match,
           castles: mixedCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(
@@ -343,6 +350,7 @@ void main() {
           match: playingMatch,
           castles: allPlayerCastles,
           companies: [],
+          activeBattles: const [],
         );
 
         // Outcome is set.
@@ -377,6 +385,7 @@ void main() {
           match: match,
           castles: castles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.matchOutcome, equals(MatchOutcome.playerWins));
@@ -399,6 +408,7 @@ void main() {
           match: match,
           castles: castles,
           companies: [],
+          activeBattles: const [],
         );
 
         expect(result.matchOutcome, equals(MatchOutcome.aiWins));
@@ -588,6 +598,7 @@ void main() {
         match: match,
         castles: mixedCastles,
         companies: [],
+        activeBattles: const [],
       );
       expect(midResult.matchOutcome, isNull,
           reason: 'Mid-game mixed ownership should not produce outcome');
@@ -606,6 +617,7 @@ void main() {
         match: match,
         castles: allPlayerCastles,
         companies: [],
+        activeBattles: const [],
       );
       expect(finalResult.matchOutcome, equals(MatchOutcome.playerWins),
           reason: 'All player castles must produce playerWins');

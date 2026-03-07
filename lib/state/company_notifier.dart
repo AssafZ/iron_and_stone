@@ -151,6 +151,8 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
     if (idx < 0) return;
 
     final company = sourceList[idx];
+    // T053: blocked — cannot reroute a company that is locked in battle.
+    if (company.battleId != null) return;
     final updated = const MoveCompany().setDestination(
       company: company,
       destination: destination,
@@ -173,7 +175,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: newList,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
 
@@ -228,7 +229,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: remaining,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(remaining);
@@ -278,7 +278,6 @@ class CompanyNotifier extends AsyncNotifier<CompanyListState> {
 
     state = AsyncData(current.copyWith(
       companies: updated,
-      selectedCompanyId: null,
       nodeOccupancy: updatedOcc,
     ));
     ref.read(matchNotifierProvider.notifier).updateCompanies(updated);

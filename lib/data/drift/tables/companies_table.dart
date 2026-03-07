@@ -26,6 +26,11 @@ class CompaniesTable extends Table {
   /// e.g. '{"warrior":10,"archer":5}'
   TextColumn get compositionJson => text()();
 
+  /// ID of the active battle this Company is locked into, or empty string
+  /// when not in battle. Matches [BattlesTable.id] format: "battle_<nodeId>".
+  TextColumn get battleId =>
+      text().withDefault(const Constant(''))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

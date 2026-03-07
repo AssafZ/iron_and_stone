@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:iron_and_stone/data/drift/app_database.dart';
+import 'package:iron_and_stone/domain/entities/active_battle.dart';
+import 'package:iron_and_stone/domain/entities/battle.dart';
 import 'package:iron_and_stone/domain/entities/castle.dart';
 import 'package:iron_and_stone/domain/entities/company.dart';
 import 'package:iron_and_stone/domain/entities/game_map_fixture.dart';
@@ -60,6 +62,120 @@ Map<UnitRole, int> _decodeGarrison(String json) {
     }
   }
   return result;
+}
+
+/// Encodes a [Battle] to a JSON string for storage in [BattlesTable.battleJson].
+///
+/// Serialises: roundNumber, kind, outcome, highGroundActive, roundLog,
+/// attackerHp, defenderHp, attackers (compositions), defenders (compositions).
+String _encodeBattle(Battle battle) {
+  List<Map<String, dynamic>> encodeCompanies(List<Company> companies) {
+    return companies.map((c) {
+      return {
+        'composition': {
+          for (final e in c.composition.entries) e.key.name: e.value,
+        },
+      };
+    }).toList();
+  }
+
+  Map<String, int>? hp = battle.attackerHp != null
+      ? Map<String, int>.from(battle.attackerHp!)
+      : null;
+  Map<String, int>? dhp = battle.defenderHp != null
+      ? Map<String, int>.from(battle.defenderHp!)
+      : null;
+
+  return jsonEncode({
+    'roundNumber': battle.roundNumber,
+    'kind': battle.kind.name,
+    'outcome': battle.outcome?.name,
+    'highGroundActive': battle.highGroundActive,
+    'roundLog': battle.roundLog,
+    'attackerHp': hp,
+    'defenderHp': dhp,
+    'attackers': encodeCompanies(battle.attackers),
+    'defenders': encodeCompanies(battle.defenders),
+    if (battle.initialAttackers != null)
+      'initialAttackers': encodeCompanies(battle.initialAttackers!),
+    if (battle.initialDefenders != null)
+      'initialDefenders': encodeCompanies(battle.initialDefenders!),
+  });
+}
+
+/// Decodes a [Battle] from the JSON string stored in [BattlesTable.battleJson].
+Battle _decodeBattle(String json) {
+  final raw = jsonDecode(json) as Map<String, dynamic>;
+
+  Company decodeCompany(Map<String, dynamic> map) {
+    final compMap = map['composition'] as Map<String, dynamic>;
+    final composition = <UnitRole, int>{};
+    for (final e in compMap.entries) {
+      final role = UnitRole.values.where((r) => r.name == e.key).firstOrNull;
+      if (role != null) composition[role] = (e.value as num).toInt();
+    }
+    return Company(composition: composition);
+  }
+
+  final attackers = (raw['attackers'] as List<dynamic>)
+      .map((e) => decodeCompany(e as Map<String, dynamic>))
+      .toList();
+  final defenders = (raw['defenders'] as List<dynamic>)
+      .map((e) => decodeCompany(e as Map<String, dynamic>))
+      .toList();
+
+  BattleOutcome? outcome;
+  final outcomeStr = raw['outcome'] as String?;
+  if (outcomeStr != null) {
+    outcome = BattleOutcome.values
+        .where((o) => o.name == outcomeStr)
+        .firstOrNull;
+  }
+
+  final kind = BattleKind.values
+      .where((k) => k.name == (raw['kind'] as String? ?? 'roadCollision'))
+      .firstOrNull ?? BattleKind.roadCollision;
+
+  SideHp? attackerHp;
+  final rawAHp = raw['attackerHp'];
+  if (rawAHp != null) {
+    attackerHp = {
+      for (final e in (rawAHp as Map<String, dynamic>).entries)
+        e.key: (e.value as num).toInt(),
+    };
+  }
+
+  SideHp? defenderHp;
+  final rawDHp = raw['defenderHp'];
+  if (rawDHp != null) {
+    defenderHp = {
+      for (final e in (rawDHp as Map<String, dynamic>).entries)
+        e.key: (e.value as num).toInt(),
+    };
+  }
+
+  final roundLog = (raw['roundLog'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [];
+
+  return Battle(
+    attackers: attackers,
+    defenders: defenders,
+    roundNumber: (raw['roundNumber'] as num?)?.toInt() ?? 0,
+    kind: kind,
+    outcome: outcome,
+    highGroundActive: raw['highGroundActive'] as bool? ?? false,
+    roundLog: roundLog,
+    attackerHp: attackerHp,
+    defenderHp: defenderHp,
+    initialAttackers: (raw['initialAttackers'] as List<dynamic>?)
+        ?.map((e) => decodeCompany(e as Map<String, dynamic>))
+        .toList(),
+    initialDefenders: (raw['initialDefenders'] as List<dynamic>?)
+        ?.map((e) => decodeCompany(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -139,9 +255,31 @@ class MatchDao {
               progress: Value(co.progress),
               compositionJson:
                   Value(_encodeGarrison(co.company.composition)),
+              battleId: Value(co.battleId ?? ''),
             ));
       }
-    });
+
+      // --- Battle rows ---
+      await (_db.delete(_db.battlesTable)
+            ..where((t) => t.matchId.equals(matchId)))
+          .go();
+
+      for (final ab in state.activeBattles) {
+        await _db.into(_db.battlesTable).insert(BattlesTableCompanion(
+              id: Value(ab.id),
+              matchId: Value(matchId),
+              nodeId: Value(ab.nodeId),
+              attackerCompanyIds:
+                  Value(jsonEncode(ab.attackerCompanyIds)),
+              defenderCompanyIds:
+                  Value(jsonEncode(ab.defenderCompanyIds)),
+              attackerOwnership:
+                  Value(_ownershipToString(ab.attackerOwnership)),
+              battleJson: Value(_encodeBattle(ab.battle)),
+            ));
+      }
+      // TODO(cleanup): growthRemainder persistence not yet implemented
+    }); // end transaction
   }
 
   // ---------------------------------------------------------------------------
@@ -192,6 +330,8 @@ class MatchDao {
           : null;
 
       final composition = _decodeGarrison(row.compositionJson);
+      // Empty string in DB → null battleId on the domain entity.
+      final battleId = row.battleId.isNotEmpty ? row.battleId : null;
 
       companies.add(CompanyOnMap(
         id: row.id,
@@ -200,8 +340,32 @@ class MatchDao {
         destination: destination,
         progress: row.progress,
         company: Company(composition: composition),
+        battleId: battleId,
       ));
     }
+
+    // Load battle rows.
+    final battleRows = await (_db.select(_db.battlesTable)
+          ..where((t) => t.matchId.equals(matchId)))
+        .get();
+
+    final activeBattles = battleRows.map((row) {
+      final attackerIds =
+          (jsonDecode(row.attackerCompanyIds) as List<dynamic>)
+              .map((e) => e as String)
+              .toList();
+      final defenderIds =
+          (jsonDecode(row.defenderCompanyIds) as List<dynamic>)
+              .map((e) => e as String)
+              .toList();
+      return ActiveBattle(
+        nodeId: row.nodeId,
+        attackerCompanyIds: attackerIds,
+        defenderCompanyIds: defenderIds,
+        attackerOwnership: _ownershipFromString(row.attackerOwnership),
+        battle: _decodeBattle(row.battleJson),
+      );
+    }).toList();
 
     final match = Match(
       map: map,
@@ -214,6 +378,7 @@ class MatchDao {
       match: match,
       castles: castles,
       companies: companies,
+      activeBattles: activeBattles,
     );
   }
 
@@ -231,6 +396,9 @@ class MatchDao {
             ..where((t) => t.matchId.equals(matchId)))
           .go();
       await (_db.delete(_db.companiesTable)
+            ..where((t) => t.matchId.equals(matchId)))
+          .go();
+      await (_db.delete(_db.battlesTable)
             ..where((t) => t.matchId.equals(matchId)))
           .go();
     });

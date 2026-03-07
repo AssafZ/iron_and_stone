@@ -15,7 +15,8 @@ import 'package:iron_and_stone/domain/use_cases/check_collisions.dart';
 import 'package:iron_and_stone/domain/value_objects/ownership.dart';
 import 'package:iron_and_stone/state/company_notifier.dart';
 import 'package:iron_and_stone/state/match_notifier.dart';
-import 'package:iron_and_stone/ui/screens/castle_screen.dart';
+import 'package:iron_and_stone/ui/screens/castle_screen.dart'
+    show CastleScreen, castleSelectedCompanyProvider;
 
 // ---------------------------------------------------------------------------
 // Map & castle fixtures
@@ -245,11 +246,11 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
-    // T033: dismissing the roster without selection triggers no company action.
+    // T033: opening the castle screen auto-selects the first player company.
     // -----------------------------------------------------------------------
     testWidgets(
-      'T033: dismissing the castle screen without tapping a roster row '
-      'triggers no company selection',
+      'T033: opening the castle screen auto-selects the first player company '
+      'so the map always shows the correct unit on top',
       (tester) async {
         final coA = _makePlayerCompany(
           id: 'co_a',
@@ -269,13 +270,75 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Navigate back without tapping any row (pop via back button).
-        final NavigatorState navigator = tester.state(find.byType(Navigator));
-        navigator.pop();
+        // The first company should be auto-selected on entry.
+        expect(fakeNotifier.lastSelectedId, equals('co_a'));
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // T033b: re-opening the castle screen restores the previously selected
+    // company — NOT always the first on the list.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'T033b: re-opening the castle screen restores the previously selected '
+      'company (selection persists across navigation via castleSelectedCompanyProvider)',
+      (tester) async {
+        final coA = _makePlayerCompany(
+          id: 'co_a',
+          currentNode: _playerCastleNode,
+          soldiers: 10,
+        );
+        final coB = _makePlayerCompany(
+          id: 'co_b',
+          currentNode: _playerCastleNode,
+          soldiers: 20,
+        );
+
+        final fakeNotifier = _FakeCompanyNotifier(
+          CompanyListState(companies: [coA, coB]),
+        );
+
+        // Simulate "re-open after a previous visit where co_b was selected"
+        // by pre-seeding the castleSelectedCompanyProvider.
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              matchNotifierProvider.overrideWith(() {
+                final castle = Castle(
+                  id: 'player_castle',
+                  ownership: Ownership.player,
+                  garrison: const {},
+                );
+                final matchState = MatchState(
+                  match: _minimalMatch(),
+                  castles: [castle],
+                  companies: [coA, coB],
+                );
+                return _FakeMatchNotifier(matchState);
+              }),
+              companyNotifierProvider.overrideWith(() => fakeNotifier),
+              // Pre-seed: co_b was selected in a previous visit.
+              castleSelectedCompanyProvider('player_castle')
+                  .overrideWith((ref) => 'co_b'),
+            ],
+            child: const MaterialApp(
+              home: CastleScreen(castleId: 'player_castle'),
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
-        // selectCompany should never have been called.
-        expect(fakeNotifier.lastSelectedId, isNull);
+        // co_b should be kept as the selection; co_a should NOT be re-selected.
+        // _ensureSelection sees castleSelectedCompanyProvider = 'co_b' and
+        // co_b is present in widget.companies → keeps co_b.
+        expect(fakeNotifier.lastSelectedId, equals('co_b'));
+        expect(fakeNotifier.lastSelectedId, isNot(equals('co_a')));
+
+        // co_b row must have the gold border (isFront == true).
+        final coARow = find.byKey(const ValueKey('roster_row_co_a'));
+        final coBRow = find.byKey(const ValueKey('roster_row_co_b'));
+        expect(coARow, findsOneWidget);
+        expect(coBRow, findsOneWidget);
       },
     );
 
